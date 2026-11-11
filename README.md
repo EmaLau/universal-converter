@@ -1,34 +1,38 @@
 # Universal Converter
 
-**Un convertitore di file self-hosted, in stile iLovePDF.** Documenti, fogli di calcolo, presentazioni, immagini, audio, video, sottotitoli, ebook, dati, font e archivi: circa **200 formati** e oltre **3.000 combinazioni**, tutto sul tuo server. I file non escono dalla tua rete e vengono cancellati da soli dopo qualche ora.
+🇬🇧 **English** · 🇮🇹 [Italiano](README.it.md)
+
+**A self-hosted file converter, in the spirit of iLovePDF.** Documents, spreadsheets, presentations, images, audio, video, subtitles, ebooks, data, fonts and archives: about **200 formats** and more than **3,000 combinations**, all on your own server. Files never leave your network and are deleted automatically after a few hours.
 
 ![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)
 ![Python](https://img.shields.io/badge/python-3.11+-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![Nextcloud](https://img.shields.io/badge/Nextcloud-30--36-0082C9?logo=nextcloud&logoColor=white)
-![Licenza](https://img.shields.io/badge/licenza-AGPL--3.0-blue)
+![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
 
-## Funzionalità
+## Features
 
-- **Pagina web** con strumenti pronti ("Word in PDF", "HEIC in JPG", "JSON in Excel"…), trascinamento e conversione di più file insieme.
-- **Conversioni a catena**: se non esiste un programma che converte direttamente, il server trova il percorso più breve. Markdown → PDF diventa Pandoc + LibreOffice, JSON → Excel diventa JSON → CSV → XLSX.
-- **Veloce dove si può**: i video già compatibili vengono copiati senza ricodifica, in pochi secondi.
-- **API JSON** per script e altre applicazioni.
-- **App Nextcloud** (facoltativa): tasto destro su un file → **Converti in ▸ formato**, e il risultato appare accanto all'originale.
-- **PDF automatici** (facoltativi) accanto agli appunti Xournal++ e ai documenti Office in Nextcloud.
-- **Robusto**: coda con limite di conversioni contemporanee, tempi massimi, limite di dimensione sui file creati, pulizia automatica.
+- **Web page** with ready-made tools ("Word to PDF", "HEIC to JPG", "JSON to Excel"…), drag and drop, and batch conversion of several files at once.
+- **Chained conversions**: when no single program can do a conversion, the server finds the shortest path. Markdown → PDF becomes Pandoc + LibreOffice, JSON → Excel becomes JSON → CSV → XLSX.
+- **Fast where possible**: videos with compatible codecs are copied without re-encoding, in a few seconds.
+- **JSON API** for scripts and other applications.
+- **Nextcloud app** (optional): right-click a file → **Converti in ▸ format** ("Convert to"), and the result appears next to the original.
+- **Automatic PDFs** (optional) next to Xournal++ notes and Office documents in Nextcloud.
+- **Robust**: a queue with a limit on concurrent conversions, timeouts, a size limit on generated files, automatic cleanup.
 
-| Categoria | Alcuni formati |
+| Category | Some formats |
 |---|---|
-| Documenti | PDF, DOCX, ODT, RTF, Markdown, HTML, LaTeX, AsciiDoc, Typst, Pages, Xournal++ |
-| Fogli di calcolo e presentazioni | XLSX, ODS, CSV, Numbers, PPTX, ODP, Keynote |
-| Immagini e disegni | JPG, PNG, WEBP, HEIC, AVIF, SVG, EPS, PSD, RAW delle fotocamere, CorelDRAW, Visio |
-| Audio e video | MP3, FLAC, WAV, OPUS, MP4, MKV, MOV, WEBM, GIF |
-| Altro | sottotitoli (SRT, VTT, ASS), ebook (EPUB, MOBI, AZW3, CBR), dati (JSON, YAML, TOML), font (TTF, OTF, WOFF2), archivi (ZIP, 7Z, RAR, TAR.ZST, ISO) |
+| Documents | PDF, DOCX, ODT, RTF, Markdown, HTML, LaTeX, AsciiDoc, Typst, Pages, Xournal++ |
+| Spreadsheets and presentations | XLSX, ODS, CSV, Numbers, PPTX, ODP, Keynote |
+| Images and drawings | JPG, PNG, WEBP, HEIC, AVIF, SVG, EPS, PSD, camera RAW, CorelDRAW, Visio |
+| Audio and video | MP3, FLAC, WAV, OPUS, MP4, MKV, MOV, WEBM, GIF |
+| Other | subtitles (SRT, VTT, ASS), ebooks (EPUB, MOBI, AZW3, CBR), data (JSON, YAML, TOML), fonts (TTF, OTF, WOFF2), archives (ZIP, 7Z, RAR, TAR.ZST, ISO) |
 
-## Avvio rapido
+> The user interface is in Italian. The API, the formats and this documentation are language-independent.
 
-Serve Docker con Docker Compose.
+## Quick start
+
+You need Docker with Docker Compose.
 
 ```bash
 git clone https://github.com/EmaLau/universal-converter.git
@@ -36,71 +40,71 @@ cd universal-converter
 docker compose up -d --build
 ```
 
-Apri <http://localhost:8080>. La documentazione completa è su <http://localhost:8080/docs>.
+Open <http://localhost:8080>. The built-in documentation (in Italian) is at <http://localhost:8080/docs>; the English version is [here](server/docs/documentation.md).
 
-La prima build scarica LibreOffice, FFmpeg, Calibre e gli altri programmi (circa 500 MB): richiede qualche minuto. Le build successive sono quasi istantanee.
+The first build downloads LibreOffice, FFmpeg, Calibre and the other programs (about 500 MB), so it takes a few minutes. Later builds are almost instant.
 
-Per verificare che tutte le conversioni funzionino:
+To check that every conversion works:
 
 ```bash
 docker compose exec converter python3 /app/selftest.py
 ```
 
-> **Nota sulla sicurezza.** Il servizio non ha login e di base risponde solo su `127.0.0.1`. Aprilo alla rete solo se è fidata (casa, VPN), oppure mettilo dietro un reverse proxy con autenticazione. Non esporlo direttamente su Internet.
+> **Security note.** The service has no login and by default listens only on `127.0.0.1`. Open it to the network only if the network is trusted (home, VPN), or put it behind a reverse proxy with authentication. Do not expose it directly to the Internet.
 
-## Configurazione
+## Configuration
 
-Copia `.env.example` in `.env` e modifica quello che ti serve. Le opzioni principali:
+Copy `.env.example` to `.env` and change what you need. The main options:
 
-| Variabile | Predefinito | Descrizione |
+| Variable | Default | Description |
 |---|---|---|
-| `CONVERTER_BIND` / `CONVERTER_PORT` | `127.0.0.1` / `8080` | Dove pubblicare il servizio (`0.0.0.0` per tutta la rete) |
-| `MAX_PARALLEL` | `2` | Conversioni contemporanee |
-| `RETAIN_HOURS` | `6` | Dopo quante ore si cancellano i risultati |
-| `MAX_UPLOAD_GB` | `20` | Dimensione massima di un file caricato |
-| `MAX_OUTPUT_GB` | `50` | Dimensione massima di ogni file creato durante una conversione |
-| `DISABLED_CONVERSIONS` | vuoto | Conversioni da nascondere, es. `heic>avif,pdf>epub` |
+| `CONVERTER_BIND` / `CONVERTER_PORT` | `127.0.0.1` / `8080` | Where to publish the service (`0.0.0.0` for the whole network) |
+| `MAX_PARALLEL` | `2` | Concurrent conversions |
+| `RETAIN_HOURS` | `6` | Hours after which results are deleted |
+| `MAX_UPLOAD_GB` | `20` | Maximum size of an uploaded file |
+| `MAX_OUTPUT_GB` | `50` | Maximum size of each file created during a conversion |
+| `DISABLED_CONVERSIONS` | empty | Conversions to hide, e.g. `heic>avif,pdf>epub` |
 
-L'elenco completo è in [`.env.example`](.env.example) e nella [documentazione](server/docs/documentazione.md#configurazione).
+The full list is in [`.env.example`](.env.example) and in the [documentation](server/docs/documentation.md#configuration).
 
-## API in breve
+## API at a glance
 
 ```bash
-# carica un file e scegli il formato
-id=$(curl -s -F file=@relazione.docx -F target=pdf http://localhost:8080/api/jobs | jq -r .id)
+# upload a file and choose the target format
+id=$(curl -s -F file=@report.docx -F target=pdf http://localhost:8080/api/jobs | jq -r .id)
 
-# controlla lo stato: queued, running, done o error
+# check the status: queued, running, done or error
 curl -s http://localhost:8080/api/jobs/$id
 
-# scarica il risultato
+# download the result
 curl -OJ http://localhost:8080/api/jobs/$id/download
 ```
 
-Altri endpoint: `GET /api/formats` (formati supportati), `GET /api/plan/{da}/{a}` (passaggi previsti), `DELETE /api/jobs/{id}` (cancella subito), `GET /healthz`. I dettagli sono nella [documentazione dell'API](server/docs/documentazione.md#api).
+Other endpoints: `GET /api/formats` (supported formats), `GET /api/plan/{from}/{to}` (planned steps), `DELETE /api/jobs/{id}` (delete now), `GET /healthz`. Details are in the [API documentation](server/docs/documentation.md#api).
 
 ## Nextcloud
 
 ```bash
-cp -r nextcloud-app /percorso/nextcloud/custom_apps/convertitore
+cp -r nextcloud-app /path/to/nextcloud/custom_apps/convertitore
 occ app:enable convertitore
-occ config:app:set convertitore converter_url --value=http://indirizzo-del-convertitore:8080
+occ config:app:set convertitore converter_url --value=http://converter-address:8080
 ```
 
-L'indirizzo deve essere raggiungibile dal server Nextcloud. Installazione e funzionamento sono spiegati nella [documentazione](server/docs/documentazione.md#integrazione-con-nextcloud), insieme ai [PDF automatici](server/docs/documentazione.md#pdf-automatici-per-nextcloud).
+The address must be reachable from the Nextcloud server. Installation and behaviour are explained in the [documentation](server/docs/documentation.md#nextcloud-integration), together with the [automatic PDFs](server/docs/documentation.md#automatic-pdfs-for-nextcloud).
 
-## Struttura
+## Project layout
 
 ```
-server/            servizio web (FastAPI) e Dockerfile
-  converter/       codice: API, coda dei lavori, grafo delle conversioni, convertitori
-  docs/            documentazione completa (diventa la pagina /docs)
-  tests/           test con pytest
-  selftest.py      prova vera di tutte le conversioni
-nextcloud-app/     app Nextcloud "Converti in"
-pdf-watcher/       PDF automatici per Nextcloud
+server/            web service (FastAPI) and Dockerfile
+  converter/       code: API, job queue, conversion graph, converters
+  docs/            full documentation (the Italian file becomes the /docs page)
+  tests/           pytest tests
+  selftest.py      real test of every conversion
+nextcloud-app/     Nextcloud app "Converti in" (Convert to)
+pdf-watcher/       automatic PDFs for Nextcloud
 ```
 
-## Sviluppo
+## Development
 
 ```bash
 cd server
@@ -108,12 +112,12 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[test]"
 .venv/bin/python -m pytest
 ```
 
-Per aggiungere un formato basta una funzione in `tools.py` e una riga in `graph.py`: menu, percorsi a catena e app Nextcloud si aggiornano da soli. La guida passo passo è nella sezione [Sviluppo](server/docs/documentazione.md#sviluppo).
+Adding a format takes one function in `tools.py` and one line in `graph.py`: menus, chained paths and the Nextcloud app update themselves. The step-by-step guide is in the [Development](server/docs/documentation.md#development) section.
 
-## Documentazione
+## Documentation
 
-La [documentazione completa](server/docs/documentazione.md) copre installazione, configurazione, uso, API, funzionamento interno, Nextcloud, sicurezza, manutenzione, problemi noti e domande frequenti. Ogni server la mostra anche su `/docs`.
+The [full documentation](server/docs/documentation.md) covers installation, configuration, usage, the API, internals, Nextcloud, security, maintenance, known issues and FAQ. An Italian version ([`documentazione.md`](server/docs/documentazione.md)) is also served by every instance at `/docs`.
 
-## Licenza
+## License
 
-[GNU Affero General Public License v3.0](LICENSE). Puoi usare, modificare e ridistribuire il progetto liberamente. Se lo modifichi e lo offri come servizio in rete, devi rendere disponibile anche il codice sorgente delle tue modifiche.
+[GNU Affero General Public License v3.0](LICENSE). You are free to use, modify and redistribute the project. If you modify it and offer it as a network service, you must also make the source code of your changes available.
