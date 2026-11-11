@@ -1,5 +1,7 @@
 # Universal Converter
 
+<p align="center"><img src="docs/cover.svg" width="400" alt=""></p>
+
 🇬🇧 [English](README.md) · 🇮🇹 **Italiano**
 
 **Un convertitore di file self-hosted, in stile iLovePDF.** Documenti, fogli di calcolo, presentazioni, immagini, audio, video, sottotitoli, ebook, dati, font e archivi: circa **200 formati** e oltre **3.000 combinazioni**, tutto sul tuo server. I file non escono dalla tua rete e vengono cancellati da soli dopo qualche ora.

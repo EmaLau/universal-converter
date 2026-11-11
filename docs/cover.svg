@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1b1430"/><stop offset=".7" stop-color="#121216"/></linearGradient></defs>
+  <rect width="400" height="300" rx="20" fill="url(#bg)" stroke="none"/>
+  <defs>
+    <radialGradient id="g" cx="62%" cy="45%" r="55%"><stop offset="0" stop-color="#7c3aed" stop-opacity=".35"/><stop offset="1" stop-color="#7c3aed" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="400" height="300" fill="url(#g)" stroke="none"/>
+  <!-- documento di partenza -->
+  <g stroke="#ffffff" stroke-opacity=".5" stroke-width="1.8">
+    <path d="M112 78 H160 L186 104 V218 Q186 226 178 226 H112 Q104 226 104 218 V86 Q104 78 112 78 Z" fill="#1b1430" fill-opacity=".55"/>
+    <path d="M160 78 V104 H186"/>
+  </g>
+  <g stroke="#ffffff" stroke-opacity=".3" stroke-width="1.4">
+    <path d="M118 124 H170 M118 140 H170 M118 156 H160 M118 172 H170 M118 188 H150"/>
+  </g>
+  <!-- frecce di conversione -->
+  <g stroke="#ffcc00" stroke-width="2">
+    <path d="M200 120 C222 92 246 84 268 84"/><path d="M260 76 L270 84 L260 92"/>
+    <path d="M204 152 H264"/><path d="M256 144 L266 152 L256 160"/>
+    <path d="M200 184 C222 212 246 220 268 220"/><path d="M260 212 L270 220 L260 228"/>
+  </g>
+  <!-- immagine -->
+  <g stroke="#ffffff" stroke-opacity=".5" stroke-width="1.6">
+    <rect x="282" y="58" width="64" height="52" rx="8" fill="#1b1430" fill-opacity=".55"/>
+    <path d="M288 102 L306 82 L320 96 L328 88 L340 102"/>
+    <circle cx="330" cy="72" r="5" stroke="#ffcc00" stroke-opacity=".9"/>
+  </g>
+  <!-- audio -->
+  <g stroke="#ffffff" stroke-opacity=".5" stroke-width="1.6">
+    <rect x="282" y="126" width="64" height="52" rx="8" fill="#1b1430" fill-opacity=".55"/>
+    <path d="M294 152 V152 M302 144 V160 M310 136 V168 M318 146 V158 M326 140 V164 M334 150 V154" stroke-opacity=".7"/>
+  </g>
+  <!-- pdf -->
+  <g stroke="#ffffff" stroke-opacity=".5" stroke-width="1.6">
+    <path d="M290 194 H326 L346 214 V240 Q346 246 340 246 H290 Q284 246 284 240 V200 Q284 194 290 194 Z" fill="#1b1430" fill-opacity=".55"/>
+    <path d="M326 194 V214 H346"/>
+  </g>
+  <text x="300" y="236" font-family="system-ui, sans-serif" font-size="13" font-weight="700" fill="#ffcc00" stroke="none">PDF</text>
+  <!-- ciclo -->
+  <g stroke="#ffffff" stroke-opacity=".22" stroke-width="1.4" stroke-dasharray="3 7">
+    <circle cx="232" cy="152" r="118"/>
+  </g>
+</svg>

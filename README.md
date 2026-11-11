@@ -1,5 +1,7 @@
 # Universal Converter
 
+<p align="center"><img src="docs/cover.svg" width="400" alt=""></p>
+
 🇬🇧 **English** · 🇮🇹 [Italiano](README.it.md)
 
 **A self-hosted file converter, in the spirit of iLovePDF.** Documents, spreadsheets, presentations, images, audio, video, subtitles, ebooks, data, fonts and archives: about **200 formats** and more than **3,000 combinations**, all on your own server. Files never leave your network and are deleted automatically after a few hours.
