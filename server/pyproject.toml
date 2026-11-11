@@ -1,0 +1,24 @@
+[project]
+name = "universal-converter"
+version = "2.0.0"
+description = "Convertitore di file self-hosted: documenti, immagini, audio, video, ebook e archivi"
+requires-python = ">=3.11"
+license = "AGPL-3.0-only"
+dependencies = ["fastapi>=0.100", "uvicorn", "python-multipart"]
+
+[project.optional-dependencies]
+test = ["pytest", "httpx"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["converter"]
+
+[tool.setuptools.package-data]
+converter = ["static/*.html", "entrypoint.sh"]
