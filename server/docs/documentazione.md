@@ -127,6 +127,10 @@ Le impostazioni si scrivono in `.env`, nella cartella principale del progetto (p
 | `MAX_UPLOAD_GB` | `20` | Dimensione massima di un file caricato. |
 | `MAX_OUTPUT_GB` | `50` | Dimensione massima di **ogni file** scritto da un programma durante una conversione. Se un programma si blocca e continua a scrivere, il sistema lo ferma al raggiungimento del limite e il lavoro finisce con un errore chiaro, prima che il disco si riempia. |
 | `DISABLED_CONVERSIONS` | vuoto | Conversioni da nascondere, separate da virgole. Esempio: `heic>avif,pdf>epub`. |
+| `CONVERTER_ADMIN_PASSWORD` | vuoto | Password della pagina `/admin` per le [chiavi API](#chiavi-api). In alternativa si scrive nel file `/work/data/admin-password`. Senza password l'area admin resta disattivata. |
+| `API_REQUIRE_KEY` | `false` | Valore iniziale dell'interruttore *Chiave obbligatoria per le API*; poi conta quello salvato nella pagina `/admin`. |
+| `CONVERTER_ADMIN_LOGIN` | `true` | Valore iniziale dell'interruttore *Password per entrare in questa pagina*. |
+| `DATA_DIR` | `/work/data` | Cartella delle chiavi API e delle impostazioni dell'area admin. |
 | `CONVERTER_CPUS` | `4` | CPU massime del container. |
 | `CONVERTER_MEMORY` | `4G` | Memoria massima del container. |
 | `CONVERTER_UID`, `CONVERTER_GID` | `1000` | Utente e gruppo che eseguono il servizio dentro il container. Sono anche i proprietari dei file di lavoro: impostali se monti una cartella del server al posto del volume. |
@@ -144,6 +148,7 @@ Tutti i file temporanei stanno in `/work` dentro il container (in Docker Compose
 | `/work/tmp/` | File temporanei dei programmi. |
 | `/work/home/` | Profili e cache dei programmi (Calibre, Xournal++…). |
 | `/work/disabled.json` | Conversioni disattivate (facoltativo, vedi [Manutenzione](#manutenzione)). |
+| `/work/data/` | Chiavi API (solo l'impronta SHA-256), impostazioni dell'area admin, chiave segreta dei cookie e, se presente, il file `admin-password`. **Non** viene svuotata all'avvio. |
 
 All'avvio la cartella `jobs` viene svuotata: i lavori vivono solo in memoria, quindi quelli di un avvio precedente non sono più raggiungibili.
 
@@ -168,7 +173,31 @@ Note:
 
 # API
 
-L'API usa JSON ed è la stessa usata dalla pagina web e dall'app Nextcloud. Non richiede autenticazione: vedi [Sicurezza](#sicurezza-e-privacy).
+L'API usa JSON ed è la stessa usata dalla pagina web e dall'app Nextcloud. La documentazione interattiva, dove si possono provare le chiamate, è in `/apidocs`.
+
+## Chiavi API
+
+Le chiavi si creano nella pagina `/admin`, sul modello di Gokapi. Per attivarla imposta `CONVERTER_ADMIN_PASSWORD` (o il file `/work/data/admin-password`) e riavvia.
+
+- Ogni chiave ha un nome e dei permessi:
+
+  | Permesso | Chiamate |
+  |---|---|
+  | `formats` | `GET /api/formats`, `GET /api/plan/{src}/{dst}` |
+  | `convert` | `POST /api/jobs` |
+  | `jobs` | `GET /api/jobs/{id}`, `GET /api/jobs/{id}/download`, `DELETE /api/jobs/{id}` |
+
+  Un client completo, come l'app Nextcloud o Plico, ha bisogno di tutti e tre.
+- La chiave intera si vede **una sola volta**, quando la crei: sul server resta solo la sua impronta SHA-256. Nella pagina vedi l'inizio della chiave, quando è stata creata e l'ultimo uso; puoi cambiare i permessi o revocarla.
+- Gli script mandano la chiave nell'intestazione `apikey`. Il controllo avviene **prima** di ricevere il file: `401` se la chiave è sbagliata o revocata, `403` se manca il permesso.
+- La pagina web non ha bisogno della chiave: quando la apri riceve un cookie di sessione firmato.
+- L'interruttore **Chiave obbligatoria per le API** (spento di base) rifiuta con `401` le chiamate senza chiave fatte fuori dalla pagina web. Da spento, le chiamate senza chiave sono accettate come prima, mentre quelle con una chiave rispettano i suoi permessi.
+- L'interruttore **Password per entrare in questa pagina** si può spegnere, ma allora chiunque raggiunga il servizio può gestire le chiavi.
+- Protezioni dell'area admin: cookie firmato valido 12 ore (`SameSite=Strict`), 5 tentativi sbagliati per indirizzo IP in 10 minuti, poi `429`; le modifiche richiedono l'intestazione `X-Requested-With`.
+
+```bash
+curl -H "apikey: uconv_..." -F file=@relazione.docx -F target=pdf http://localhost:8080/api/jobs
+```
 
 ## Riepilogo
 
@@ -182,6 +211,8 @@ L'API usa JSON ed è la stessa usata dalla pagina web e dall'app Nextcloud. Non 
 | `GET` | `/api/jobs/{id}/download` | Scarica il risultato |
 | `DELETE` | `/api/jobs/{id}` | Cancella subito un lavoro e i suoi file |
 | `GET` | `/docs` | Questa documentazione |
+| `GET` | `/apidocs` | Documentazione interattiva dell'API |
+| `GET` | `/admin` | Chiavi API |
 
 ## `GET /healthz`
 
@@ -189,7 +220,7 @@ L'API usa JSON ed è la stessa usata dalla pagina web e dall'app Nextcloud. Non 
 {"ok": true, "version": "2.0.0", "jobs": 3, "running": 1, "queued": 0}
 ```
 
-Usato anche dall'healthcheck di Docker.
+Usato anche dall'healthcheck di Docker. Non richiede mai la chiave.
 
 ## `GET /api/formats`
 
@@ -389,6 +420,12 @@ L'app `nextcloud-app/` (id `convertitore`, Nextcloud 30-36) aggiunge al menu di 
 
    Con Docker, `occ` si lancia così: `docker exec -u 33 <container-nextcloud> php occ ...`.
 
+3. Se nel convertitore la chiave è obbligatoria, crea nella pagina `/admin` una chiave con i permessi `formats`, `convert` e `jobs` e indicala all'app:
+
+   ```bash
+   occ config:app:set convertitore converter_api_key --value=uconv_...
+   ```
+
 Finché `converter_url` non è impostato, l'app non mostra nessuna voce. Gli indirizzi privati (192.168.x.x, 10.x.x.x…) sono ammessi: l'app li autorizza esplicitamente nel client HTTP di Nextcloud.
 
 ## Come funziona
@@ -489,10 +526,12 @@ Per far riconvertire un file basta cancellare la sua voce da `state.json`, oppur
 
 - **Tutto in locale.** I file vengono elaborati sul server e non vengono mai inviati a servizi esterni. Il container non ha bisogno di Internet per funzionare.
 - **Cancellazione automatica.** Il file caricato viene cancellato appena finisce la conversione; il risultato dopo `RETAIN_HOURS` ore, oppure subito con `DELETE`. Un riavvio cancella tutti i lavori.
-- **Nessun login.** Chiunque raggiunga la porta può convertire file e, se conosce l'identificativo di un lavoro (128 bit casuali), scaricarne il risultato. Per questo:
+- **Chiavi API.** Con l'interruttore *Chiave obbligatoria per le API* attivo, gli script devono avere una [chiave](#chiavi-api). La pagina web invece resta aperta a chi raggiunge la porta: la sessione la ottiene chiunque la apra, quindi la chiave serve a mettere ordine tra gli script e a revocarli, non a proteggere il servizio.
+- **Nessun login per la pagina web.** Chiunque raggiunga la porta può convertire file e, se conosce l'identificativo di un lavoro (128 bit casuali), scaricarne il risultato. Per questo:
   - di base il servizio risponde solo su `127.0.0.1`;
   - per usarlo da altri dispositivi, aprilo solo in una rete fidata (casa, VPN come Tailscale o WireGuard), oppure mettilo dietro un reverse proxy con autenticazione (Authelia, Authentik, basic auth…);
   - **non esporlo direttamente su Internet.**
+- **Intestazioni di sicurezza.** Le pagine hanno una Content-Security-Policy restrittiva, non si possono incorporare in altri siti (`X-Frame-Options: DENY`) e le richieste che modificano qualcosa inviate da pagine di altri siti vengono rifiutate (`403`).
 - **Utente non privilegiato.** Il servizio gira come utente normale dentro il container, non come root.
 - **File non fidati.** I file caricati vengono aperti da programmi complessi (LibreOffice, FFmpeg, ImageMagick…), che possono avere vulnerabilità. L'isolamento del container, l'utente non privilegiato, i limiti di tempo, di dimensione e di risorse riducono i rischi. Aggiorna regolarmente l'immagine (`docker compose build --pull`).
 - **Archivi.** L'estrazione usa libarchive, che rifiuta i percorsi assoluti e quelli con `../`.

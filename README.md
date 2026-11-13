@@ -17,7 +17,7 @@
 - **Web page** with ready-made tools ("Word to PDF", "HEIC to JPG", "JSON to Excel"…), drag and drop, and batch conversion of several files at once.
 - **Chained conversions**: when no single program can do a conversion, the server finds the shortest path. Markdown → PDF becomes Pandoc + LibreOffice, JSON → Excel becomes JSON → CSV → XLSX.
 - **Fast where possible**: videos with compatible codecs are copied without re-encoding, in a few seconds.
-- **JSON API** for scripts and other applications.
+- **JSON API** for scripts and other applications, with **API keys** (per-function permissions, revocable, managed on the `/admin` page) and interactive docs at `/apidocs`.
 - **Nextcloud app** (optional): right-click a file → **Converti in ▸ format** ("Convert to"), and the result appears next to the original.
 - **Automatic PDFs** (optional) next to Xournal++ notes and Office documents in Nextcloud.
 - **Robust**: a queue with a limit on concurrent conversions, timeouts, a size limit on generated files, automatic cleanup.
@@ -52,7 +52,7 @@ To check that every conversion works:
 docker compose exec converter python3 /app/selftest.py
 ```
 
-> **Security note.** The service has no login and by default listens only on `127.0.0.1`. Open it to the network only if the network is trusted (home, VPN), or put it behind a reverse proxy with authentication. Do not expose it directly to the Internet.
+> **Security note.** The web page has no login (API keys only cover scripts) and by default listens only on `127.0.0.1`. Open it to the network only if the network is trusted (home, VPN), or put it behind a reverse proxy with authentication. Do not expose it directly to the Internet.
 
 ## Configuration
 
@@ -82,7 +82,9 @@ curl -s http://localhost:8080/api/jobs/$id
 curl -OJ http://localhost:8080/api/jobs/$id/download
 ```
 
-Other endpoints: `GET /api/formats` (supported formats), `GET /api/plan/{from}/{to}` (planned steps), `DELETE /api/jobs/{id}` (delete now), `GET /healthz`. Details are in the [API documentation](server/docs/documentation.md#api).
+Other endpoints: `GET /api/formats` (supported formats), `GET /api/plan/{from}/{to}` (planned steps), `DELETE /api/jobs/{id}` (delete now), `GET /healthz`. Details are in the [API documentation](server/docs/documentation.md#api) and, on every instance, at `/apidocs`.
+
+**API keys.** Set `CONVERTER_ADMIN_PASSWORD` and open `/admin` to create keys with a name and permissions (`formats`, `convert`, `jobs`). Scripts send them in the `apikey` header (`curl -H "apikey: uconv_..." ...`); the web page needs none. A switch on `/admin` makes the key required for the API. See [API keys](server/docs/documentation.md#api-keys).
 
 ## Nextcloud
 

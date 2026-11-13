@@ -20,6 +20,9 @@ services:
       MAX_UPLOAD_GB: ${MAX_UPLOAD_GB:-20}
       MAX_OUTPUT_GB: ${MAX_OUTPUT_GB:-50}
       DISABLED_CONVERSIONS: ${DISABLED_CONVERSIONS:-}
+      CONVERTER_ADMIN_PASSWORD: ${CONVERTER_ADMIN_PASSWORD:-}
+      CONVERTER_ADMIN_LOGIN: ${CONVERTER_ADMIN_LOGIN:-true}
+      API_REQUIRE_KEY: ${API_REQUIRE_KEY:-false}
     volumes:
       - converter-work:/work
     deploy:

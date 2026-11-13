@@ -129,6 +129,10 @@ Settings go in `.env`, in the project's root folder (start from `.env.example`).
 | `MAX_UPLOAD_GB` | `20` | Maximum size of an uploaded file. |
 | `MAX_OUTPUT_GB` | `50` | Maximum size of **each file** written by a program during a conversion. If a program hangs and keeps writing, it is stopped when it reaches the limit and the job ends with a clear error, before the disk fills up. |
 | `DISABLED_CONVERSIONS` | empty | Conversions to hide, comma-separated. Example: `heic>avif,pdf>epub`. |
+| `CONVERTER_ADMIN_PASSWORD` | empty | Password for the `/admin` page that manages [API keys](#api-keys). It can also be written in `/work/data/admin-password`. Without a password the admin area stays disabled. |
+| `API_REQUIRE_KEY` | `false` | Initial value of the *Key required for the API* switch; afterwards the value saved on the `/admin` page wins. |
+| `CONVERTER_ADMIN_LOGIN` | `true` | Initial value of the *Password to enter this page* switch. |
+| `DATA_DIR` | `/work/data` | Folder holding the API keys and admin settings. |
 | `CONVERTER_CPUS` | `4` | Maximum CPUs for the container. |
 | `CONVERTER_MEMORY` | `4G` | Maximum memory for the container. |
 | `CONVERTER_UID`, `CONVERTER_GID` | `1000` | User and group that run the service inside the container. They also own the working files: set them if you mount a host folder instead of the volume. |
@@ -146,6 +150,7 @@ All temporary files live in `/work` inside the container (with Docker Compose it
 | `/work/tmp/` | Programs' temporary files. |
 | `/work/home/` | Programs' profiles and caches (Calibre, Xournal++…). |
 | `/work/disabled.json` | Disabled conversions (optional, see [Maintenance](#maintenance)). |
+| `/work/data/` | API keys (SHA-256 fingerprint only), admin settings, the cookie signing secret and, if present, the `admin-password` file. It is **not** emptied at startup. |
 
 The `jobs` folder is emptied at startup: jobs live only in memory, so those from a previous run are no longer reachable.
 
@@ -170,7 +175,31 @@ Notes:
 
 # API
 
-The API uses JSON and is the same one used by the web page and the Nextcloud app. It requires no authentication: see [Security](#security-and-privacy).
+The API uses JSON and is the same one used by the web page and the Nextcloud app. Interactive documentation, where calls can be tried out, is at `/apidocs`.
+
+## API keys
+
+Keys are created on the `/admin` page, modelled on Gokapi. To enable it set `CONVERTER_ADMIN_PASSWORD` (or the `/work/data/admin-password` file) and restart.
+
+- Each key has a name and permissions:
+
+  | Permission | Calls |
+  |---|---|
+  | `formats` | `GET /api/formats`, `GET /api/plan/{src}/{dst}` |
+  | `convert` | `POST /api/jobs` |
+  | `jobs` | `GET /api/jobs/{id}`, `GET /api/jobs/{id}/download`, `DELETE /api/jobs/{id}` |
+
+  A full client, such as the Nextcloud app or Plico, needs all three.
+- The full key is shown **only once**, when it is created: the server keeps only its SHA-256 fingerprint. The page shows the start of the key, when it was created and when it was last used; permissions can be changed and keys revoked.
+- Scripts send the key in the `apikey` header. It is checked **before** the file is received: `401` for a wrong or revoked key, `403` for a missing permission.
+- The web page needs no key: opening it gives a signed session cookie.
+- The **Key required for the API** switch (off by default) rejects with `401` calls without a key made outside the web page. When off, calls without a key are accepted as before, while calls with a key are limited to its permissions.
+- The **Password to enter this page** switch can be turned off, but then anyone who reaches the service can manage the keys.
+- Admin area protections: signed cookie valid for 12 hours (`SameSite=Strict`), 5 wrong attempts per IP address in 10 minutes then `429`; changes require the `X-Requested-With` header.
+
+```bash
+curl -H "apikey: uconv_..." -F file=@report.docx -F target=pdf http://localhost:8080/api/jobs
+```
 
 ## Summary
 
@@ -184,6 +213,8 @@ The API uses JSON and is the same one used by the web page and the Nextcloud app
 | `GET` | `/api/jobs/{id}/download` | Download the result |
 | `DELETE` | `/api/jobs/{id}` | Delete a job and its files immediately |
 | `GET` | `/docs` | This documentation (Italian version) |
+| `GET` | `/apidocs` | Interactive API documentation |
+| `GET` | `/admin` | API keys |
 
 ## `GET /healthz`
 
@@ -191,7 +222,7 @@ The API uses JSON and is the same one used by the web page and the Nextcloud app
 {"ok": true, "version": "2.0.0", "jobs": 3, "running": 1, "queued": 0}
 ```
 
-Also used by the Docker healthcheck.
+Also used by the Docker healthcheck. It never requires a key.
 
 ## `GET /api/formats`
 
@@ -391,6 +422,12 @@ The `nextcloud-app/` app (id `convertitore`, Nextcloud 30-36) adds a **Converti 
 
    With Docker, run `occ` like this: `docker exec -u 33 <nextcloud-container> php occ ...`.
 
+3. If the converter requires a key, create one on the `/admin` page with the `formats`, `convert` and `jobs` permissions and give it to the app:
+
+   ```bash
+   occ config:app:set convertitore converter_api_key --value=uconv_...
+   ```
+
 Until `converter_url` is set, the app shows no menu entry. Private addresses (192.168.x.x, 10.x.x.x…) are allowed: the app explicitly authorises them in Nextcloud's HTTP client.
 
 ## How it works
@@ -491,10 +528,12 @@ To have a file converted again, delete its entry from `state.json`, or modify th
 
 - **Everything stays local.** Files are processed on the server and never sent to external services. The container does not need the Internet to work.
 - **Automatic deletion.** The uploaded file is deleted as soon as the conversion ends; the result after `RETAIN_HOURS` hours, or immediately with `DELETE`. A restart deletes all jobs.
-- **No login.** Anyone who can reach the port can convert files and, if they know a job's identifier (128 random bits), download its result. That is why:
+- **API keys.** With the *Key required for the API* switch on, scripts need a [key](#api-keys). The web page, however, stays open to anyone who reaches the port: anyone who opens it gets a session, so keys are for keeping track of scripts and revoking them, not for protecting the service.
+- **No login for the web page.** Anyone who can reach the port can convert files and, if they know a job's identifier (128 random bits), download its result. That is why:
   - by default the service listens only on `127.0.0.1`;
   - to use it from other devices, open it only on a trusted network (home, a VPN such as Tailscale or WireGuard), or put it behind a reverse proxy with authentication (Authelia, Authentik, basic auth…);
   - **do not expose it directly to the Internet.**
+- **Security headers.** Pages have a strict Content-Security-Policy, cannot be embedded in other sites (`X-Frame-Options: DENY`), and state-changing requests sent from other sites' pages are rejected (`403`).
 - **Unprivileged user.** The service runs as a regular user inside the container, not as root.
 - **Untrusted files.** Uploaded files are opened by complex programs (LibreOffice, FFmpeg, ImageMagick…), which may have vulnerabilities. Container isolation, the unprivileged user, and the time, size and resource limits reduce the risk. Update the image regularly (`docker compose build --pull`).
 - **Archives.** Extraction uses libarchive, which rejects absolute paths and paths containing `../`.

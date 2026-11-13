@@ -38,7 +38,14 @@ class ConverterClient {
 
 	private function opts(array $extra = []): array {
 		// Di solito il server sta su un indirizzo privato: il client HTTP di Nextcloud li blocca se non lo si autorizza.
-		return $extra + ['nextcloud' => ['allow_local_address' => true], 'timeout' => 30, 'http_errors' => false];
+		$opts = $extra + ['nextcloud' => ['allow_local_address' => true], 'timeout' => 30, 'http_errors' => false];
+		// Chiave API creata nella pagina /admin del convertitore (permessi formats, convert e jobs), impostata con:
+		// occ config:app:set convertitore converter_api_key --value=uconv_...
+		$key = trim($this->appConfig->getValueString('convertitore', 'converter_api_key', ''));
+		if ($key !== '') {
+			$opts['headers'] = ($opts['headers'] ?? []) + ['apikey' => $key];
+		}
+		return $opts;
 	}
 
 	private static function detail(string $body, int $code): string {

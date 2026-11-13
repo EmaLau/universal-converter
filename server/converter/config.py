@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import Mapping
 
 
+def truthy(v: str | None) -> bool:
+    return (v or "").strip().lower() in ("1", "true", "yes", "si", "on")
+
+
 def _pairs(text: str) -> set[tuple[str, str]]:
     """"heic>avif, pdf>epub" -> {("heic", "avif"), ("pdf", "epub")}."""
     out = set()
@@ -28,10 +32,18 @@ class Settings:
     max_upload_bytes: int = 20 * 1024**3
     max_output_bytes: int = 50 * 1024**3  # limite per ogni file scritto dai programmi di conversione
     disabled: frozenset[tuple[str, str]] = field(default_factory=frozenset)
+    data_dir: Path | None = None    # chiavi API e impostazioni dell'area admin (predefinita: <work_dir>/data)
+    admin_password: str = ""        # password della pagina /admin (oppure file admin-password in data_dir)
+    require_key: bool = False       # valore iniziale di "chiave obbligatoria per le API"
+    admin_login: bool = True        # valore iniziale di "password per l'area admin"
 
     @property
     def jobs_dir(self) -> Path:
         return self.work_dir / "jobs"
+
+    @property
+    def keys_dir(self) -> Path:
+        return self.data_dir or self.work_dir / "data"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> "Settings":
@@ -52,4 +64,8 @@ class Settings:
             max_upload_bytes=int(float(env.get("MAX_UPLOAD_GB", "20")) * 1024**3),
             max_output_bytes=int(float(env.get("MAX_OUTPUT_GB", "50")) * 1024**3),
             disabled=frozenset(disabled),
+            data_dir=Path(env["DATA_DIR"]) if env.get("DATA_DIR") else None,
+            admin_password=env.get("CONVERTER_ADMIN_PASSWORD", ""),
+            require_key=truthy(env.get("API_REQUIRE_KEY")),
+            admin_login=truthy(env.get("CONVERTER_ADMIN_LOGIN", "true")),
         )

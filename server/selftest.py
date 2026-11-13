@@ -69,11 +69,12 @@ def make_samples(d: Path) -> None:
 
 
 class Api:
-    def __init__(self, base: str):
+    def __init__(self, base: str, key: str = ""):
         self.base = base.rstrip("/")
+        self.auth = {"apikey": key} if key else {}  # chiave con i permessi formats, convert e jobs
 
     def get(self, path: str) -> dict:
-        with urllib.request.urlopen(self.base + path, timeout=30) as r:
+        with urllib.request.urlopen(urllib.request.Request(self.base + path, headers=self.auth), timeout=30) as r:
             return json.load(r)
 
     def post_file(self, path: Path, target: str) -> dict:
@@ -81,12 +82,12 @@ class Api:
         body = (f"--{b}\r\nContent-Disposition: form-data; name=\"target\"\r\n\r\n{target}\r\n"
                 f"--{b}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{path.name}\"\r\n"
                 "Content-Type: application/octet-stream\r\n\r\n").encode() + path.read_bytes() + f"\r\n--{b}--\r\n".encode()
-        req = urllib.request.Request(self.base + "/api/jobs", body, {"Content-Type": f"multipart/form-data; boundary={b}"})
+        req = urllib.request.Request(self.base + "/api/jobs", body, {"Content-Type": f"multipart/form-data; boundary={b}", **self.auth})
         with urllib.request.urlopen(req, timeout=120) as r:
             return json.load(r)
 
     def delete(self, job: str) -> None:
-        urllib.request.urlopen(urllib.request.Request(f"{self.base}/api/jobs/{job}", method="DELETE"), timeout=30)
+        urllib.request.urlopen(urllib.request.Request(f"{self.base}/api/jobs/{job}", method="DELETE", headers=self.auth), timeout=30)
 
     def wait(self, job: str, limit: float = 600) -> dict:
         end = time.time() + limit
@@ -101,11 +102,13 @@ class Api:
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--url", default=os.environ.get("CONVERTER_URL", "http://127.0.0.1:8080"))
+    p.add_argument("--key", default=os.environ.get("CONVERTER_API_KEY", ""),
+                   help="chiave API, se nella pagina /admin la chiave e' obbligatoria")
     p.add_argument("--all", action="store_true", help="prova tutte le destinazioni possibili dei campioni")
     p.add_argument("--write-disabled", action="store_true", help="salva le conversioni fallite in disabled.json")
     args = p.parse_args()
 
-    api = Api(args.url)
+    api = Api(args.url, args.key)
     d = Path(tempfile.mkdtemp(prefix="selftest-"))
     try:
         make_samples(d)
