@@ -1,0 +1,25 @@
+{
+    "translations": {
+        "Not logged in": "Non autenticato",
+        "File not found": "File non trovato",
+        "Unknown or expired conversion": "Conversione sconosciuta o scaduta",
+        "The converter lost the job (restarted?)": "Il convertitore ha perso il lavoro (riavviato?)",
+        "Saving…": "Salvataggio…",
+        "Saving failed: %s": "Salvataggio fallito: %s",
+        "source folder not writable, saved in the home folder": "cartella di origine non scrivibile, salvato nella cartella principale",
+        "Converter address not configured (converter_url)": "Indirizzo del convertitore non configurato (converter_url)",
+        "Cannot read the file": "Impossibile leggere il file",
+        "Converter not reachable: %s": "Convertitore non raggiungibile: %s",
+        "Unexpected response from the converter (HTTP %s)": "Risposta inattesa dal convertitore (HTTP %s)",
+        "Downloading the result failed (HTTP %s)": "Download del risultato fallito (HTTP %s)",
+        "Text": "Testo",
+        "Converting “{name}” to {target}…": "Converto «{name}» in {target}…",
+        "Created “{name}”": "Creato «{name}»",
+        "error": "errore",
+        "“{name}”: queued (position {position})…": "«{name}»: in coda (posizione {position})…",
+        "“{name}”: queued…": "«{name}»: in coda…",
+        "Converting “{name}” failed: {error}": "Conversione di «{name}» non riuscita: {error}",
+        "Convert to…": "Converti in…"
+    },
+    "pluralForm": "nplurals=2; plural=(n != 1);"
+}

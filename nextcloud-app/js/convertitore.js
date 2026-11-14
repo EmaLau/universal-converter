@@ -20,7 +20,9 @@
 		}
 	}
 
-	const NAMES = { docx: 'Word', doc: 'Word 97', xlsx: 'Excel', xls: 'Excel 97', pptx: 'PowerPoint', ppt: 'PowerPoint 97', md: 'Markdown', txt: 'Testo', tex: 'LaTeX', azw3: 'Kindle' }
+	// traduzioni: l10n/<lingua>.js, caricate da LoadScriptsListener (testi originali in inglese)
+	const tr = (s, vars) => (window.t ? window.t('convertitore', s, vars, undefined, { escape: false }) : s.replace(/{(\w+)}/g, (m, k) => (vars && k in vars ? vars[k] : m)))
+	const NAMES = { docx: 'Word', doc: 'Word 97', xlsx: 'Excel', xls: 'Excel 97', pptx: 'PowerPoint', ppt: 'PowerPoint 97', md: 'Markdown', txt: tr('Text'), tex: 'LaTeX', azw3: 'Kindle' }
 	const ALIAS = { jpeg: 'jpg', jfif: 'jpg', tif: 'tiff', htm: 'html', markdown: 'md', tgz: 'tar.gz', tbz2: 'tar.bz2', txz: 'tar.xz', heif: 'heic' }
 	const extOf = name => {
 		const l = (name || '').toLowerCase()
@@ -87,7 +89,7 @@
 
 	async function convert(node, target, ctx) {
 		const name = node.basename
-		const wait = toast(`Converto «${name}» in ${target.toUpperCase()}…`, 'info', 0)
+		const wait = toast(tr('Converting “{name}” to {target}…', { name, target: target.toUpperCase() }), 'info', 0)
 		try {
 			const { job } = await api('POST', '/convert', { fileId: node.fileid, target })
 			let delay = 1500
@@ -101,19 +103,19 @@
 				}
 				if (r.state === 'done') {
 					wait.remove()
-					toast(`Creato «${r.name}»` + (r.note ? ` (${r.note})` : ''), 'success')
+					toast(tr('Created “{name}”', { name: r.name }) + (r.note ? ` (${r.note})` : ''), 'success')
 					showNewFile(node, ctx, r)
 					return
 				}
-				if (r.state === 'error') throw new Error(r.error || 'errore')
+				if (r.state === 'error') throw new Error(r.error || tr('error'))
 				const pct = typeof r.progress === 'number' && r.progress > 0 && r.progress < 1 ? ` ${Math.round(r.progress * 100)}%` : ''
 				wait.textContent = r.state === 'queued'
-					? `«${name}»: in coda${r.position > 1 ? ` (posizione ${r.position})` : ''}…`
-					: `«${name}» → ${target.toUpperCase()}${pct}${r.step ? ' · ' + r.step : ''}`
+					? (r.position > 1 ? tr('“{name}”: queued (position {position})…', { name, position: r.position }) : tr('“{name}”: queued…', { name }))
+					: `“${name}” → ${target.toUpperCase()}${pct}${r.step ? ' · ' + r.step : ''}`
 			}
 		} catch (e) {
 			wait.remove()
-			toast(`Conversione di «${name}» non riuscita: ${e.message}`, 'error', 15000)
+			toast(tr('Converting “{name}” failed: {error}', { name, error: e.message }), 'error', 15000)
 		}
 	}
 
@@ -123,7 +125,7 @@
 
 	register({
 		id: 'convertitore',
-		displayName: () => 'Converti in…',
+		displayName: () => tr('Convert to…'),
 		iconSvgInline: () => ICON,
 		order: 30,
 		enabled: ctx => !!ctx.nodes && ctx.nodes.length > 0 && common(ctx.nodes).length > 0,

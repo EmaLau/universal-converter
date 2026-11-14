@@ -25,6 +25,7 @@ class LoadScriptsListener implements IEventListener {
 		}
 		// La tabella dei formati arriva insieme alla pagina: il JS registra le azioni subito, senza fetch.
 		$this->initialState->provideLazyInitialState('formats', fn () => $this->client->formats());
+		Util::addTranslations(Application::APP_ID);
 		Util::addScript(Application::APP_ID, 'convertitore');
 	}
 }

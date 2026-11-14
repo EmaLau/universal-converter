@@ -5,6 +5,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Nextcloud app 1.1.0, ready for the Nextcloud App Store: English texts with Italian translation (`l10n/`),
+  complete `info.xml` (validated against the App Store schema), `scripts/nextcloud-release.sh` to build and sign
+  the release archive.
+
 ## [2.1.0] - 2026-11-14
 
 ### Added

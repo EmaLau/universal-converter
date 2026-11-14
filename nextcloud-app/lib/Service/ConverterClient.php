@@ -8,6 +8,7 @@ use OCP\Http\Client\IClientService;
 use OCP\IAppConfig;
 use OCP\ICache;
 use OCP\ICacheFactory;
+use OCP\IL10N;
 use Psr\Log\LoggerInterface;
 
 /** Parla con il server Universal Converter (API descritta in server/converter/app.py). */
@@ -19,6 +20,7 @@ class ConverterClient {
 		private IAppConfig $appConfig,
 		ICacheFactory $cacheFactory,
 		private LoggerInterface $logger,
+		private IL10N $l,
 	) {
 		$this->cache = $cacheFactory->createDistributed('convertitore');
 	}
@@ -31,7 +33,7 @@ class ConverterClient {
 	private function url(string $path): string {
 		$base = $this->baseUrl();
 		if ($base === '') {
-			throw new ConvertException('Indirizzo del convertitore non configurato (converter_url)');
+			throw new ConvertException($this->l->t('Converter address not configured (converter_url)'));
 		}
 		return $base . $path;
 	}
@@ -81,7 +83,7 @@ class ConverterClient {
 	public function submit(File $file, string $target): string {
 		$fh = $file->fopen('r');
 		if ($fh === false) {
-			throw new ConvertException('Impossibile leggere il file');
+			throw new ConvertException($this->l->t('Cannot read the file'));
 		}
 		try {
 			$r = $this->clientService->newClient()->post($this->url('/api/jobs'), $this->opts([
@@ -93,7 +95,7 @@ class ConverterClient {
 				],
 			]));
 		} catch (\Throwable $e) {
-			throw new ConvertException('Convertitore non raggiungibile: ' . $e->getMessage());
+			throw new ConvertException($this->l->t('Converter not reachable: %s', [$e->getMessage()]));
 		} finally {
 			if (is_resource($fh)) {
 				fclose($fh);
@@ -114,14 +116,14 @@ class ConverterClient {
 		} catch (ConvertException $e) {
 			throw $e;
 		} catch (\Throwable $e) {
-			throw new ConvertException('Convertitore non raggiungibile: ' . $e->getMessage());
+			throw new ConvertException($this->l->t('Converter not reachable: %s', [$e->getMessage()]));
 		}
 		if ($r->getStatusCode() === 404) {
 			return null;
 		}
 		$d = json_decode((string)$r->getBody(), true);
 		if ($r->getStatusCode() !== 200 || !is_array($d)) {
-			throw new ConvertException('Risposta inattesa dal convertitore (HTTP ' . $r->getStatusCode() . ')');
+			throw new ConvertException($this->l->t('Unexpected response from the converter (HTTP %s)', [$r->getStatusCode()]));
 		}
 		return $d;
 	}
@@ -134,10 +136,10 @@ class ConverterClient {
 		} catch (ConvertException $e) {
 			throw $e;
 		} catch (\Throwable $e) {
-			throw new ConvertException('Convertitore non raggiungibile: ' . $e->getMessage());
+			throw new ConvertException($this->l->t('Converter not reachable: %s', [$e->getMessage()]));
 		}
 		if ($r->getStatusCode() !== 200) {
-			throw new ConvertException('Download del risultato fallito (HTTP ' . $r->getStatusCode() . ')');
+			throw new ConvertException($this->l->t('Downloading the result failed (HTTP %s)', [$r->getStatusCode()]));
 		}
 		$body = $r->getBody();
 		if (!is_resource($body)) {

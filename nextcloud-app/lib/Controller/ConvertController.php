@@ -10,6 +10,7 @@ use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\IL10N;
 use OCP\IRequest;
 use OCP\IUserSession;
 
@@ -18,12 +19,13 @@ class ConvertController extends Controller {
 		IRequest $request,
 		private Jobs $jobs,
 		private IUserSession $userSession,
+		private IL10N $l,
 	) {
 		parent::__construct('convertitore', $request);
 	}
 
 	private function uid(): string {
-		return $this->userSession->getUser()?->getUID() ?? throw new ConvertException('Non autenticato');
+		return $this->userSession->getUser()?->getUID() ?? throw new ConvertException($this->l->t('Not logged in'));
 	}
 
 	#[NoAdminRequired]

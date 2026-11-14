@@ -10,6 +10,7 @@ use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\ICache;
 use OCP\ICacheFactory;
+use OCP\IL10N;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -27,6 +28,7 @@ class Jobs {
 		private IJobList $jobList,
 		ICacheFactory $cacheFactory,
 		private LoggerInterface $logger,
+		private IL10N $l,
 	) {
 		$this->cache = $cacheFactory->createDistributed('convertitore-jobs');
 	}
@@ -34,7 +36,7 @@ class Jobs {
 	public function start(string $uid, int $fileId, string $target): string {
 		$node = $this->rootFolder->getUserFolder($uid)->getFirstNodeById($fileId);
 		if (!$node instanceof File || !$node->isReadable()) {
-			throw new ConvertException('File non trovato');
+			throw new ConvertException($this->l->t('File not found'));
 		}
 		$job = $this->client->submit($node, $target);
 		$this->cache->set("job:$job", ['uid' => $uid, 'fileId' => $fileId, 'target' => $target, 'state' => 'pending'], self::TTL);
@@ -46,7 +48,7 @@ class Jobs {
 	public function poll(string $uid, string $job): array {
 		$info = $this->cache->get("job:$job");
 		if (!is_array($info) || $info['uid'] !== $uid) {
-			throw new ConvertException('Conversione sconosciuta o scaduta');
+			throw new ConvertException($this->l->t('Unknown or expired conversion'));
 		}
 		if (isset($info['result'])) {
 			return $info['result'];
@@ -57,7 +59,7 @@ class Jobs {
 			if (is_array($info) && isset($info['result'])) {
 				return $info['result'];
 			}
-			return $this->finish($job, $info ?: [], ['state' => 'error', 'error' => 'Il convertitore ha perso il lavoro (riavviato?)']);
+			return $this->finish($job, $info ?: [], ['state' => 'error', 'error' => $this->l->t('The converter lost the job (restarted?)')]);
 		}
 		if ($st['state'] === 'error') {
 			$this->client->delete($job);
@@ -76,7 +78,7 @@ class Jobs {
 
 	private function save(string $job, array $st): array {
 		if (!$this->cache->add("lock:$job", 1, 900)) {
-			return ['state' => 'running', 'step' => 'Salvataggio…', 'progress' => 1];
+			return ['state' => 'running', 'step' => $this->l->t('Saving…'), 'progress' => 1];
 		}
 		try {
 			$info = $this->cache->get("job:$job");
@@ -89,7 +91,7 @@ class Jobs {
 			$note = '';
 			if (!$parent instanceof Folder || !$parent->isCreatable()) {
 				$parent = $userFolder;  // cartella condivisa in sola lettura: salvo nella radice
-				$note = 'cartella di origine non scrivibile, salvato nella cartella principale';
+				$note = $this->l->t('source folder not writable, saved in the home folder');
 			}
 			$name = $parent->getNonExistingName((string)$st['out_name']);
 			$stream = $this->client->download($job);
@@ -108,7 +110,7 @@ class Jobs {
 			]);
 		} catch (\Throwable $e) {
 			$this->logger->error('Convertitore: salvataggio fallito: ' . $e->getMessage(), ['app' => 'convertitore', 'exception' => $e]);
-			return $this->finish($job, $info ?? [], ['state' => 'error', 'error' => 'Salvataggio fallito: ' . $e->getMessage()]);
+			return $this->finish($job, $info ?? [], ['state' => 'error', 'error' => $this->l->t('Saving failed: %s', [$e->getMessage()])]);
 		} finally {
 			$this->cache->remove("lock:$job");
 		}
