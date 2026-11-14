@@ -137,7 +137,7 @@ Adding a format takes one function in `tools.py` and one line in `graph.py`: men
 
 ## Contributing
 
-Bug reports, ideas and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Changes between versions are in [CHANGELOG.md](CHANGELOG.md).
+Bug reports, ideas and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Changes between versions are in [CHANGELOG.md](CHANGELOG.md), planned features in [ROADMAP.md](ROADMAP.md).
 
 ## Documentation
 

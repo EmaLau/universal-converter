@@ -135,7 +135,7 @@ Per aggiungere un formato basta una funzione in `tools.py` e una riga in `graph.
 
 ## Contribuire
 
-Segnalazioni, idee e pull request sono benvenute: vedi [CONTRIBUTING.md](CONTRIBUTING.md). Le novità di ogni versione sono in [CHANGELOG.md](CHANGELOG.md).
+Segnalazioni, idee e pull request sono benvenute: vedi [CONTRIBUTING.md](CONTRIBUTING.md). Le novità di ogni versione sono in [CHANGELOG.md](CHANGELOG.md), le funzioni in programma in [ROADMAP.md](ROADMAP.md) (in inglese).
 
 ## Documentazione
 
