@@ -448,22 +448,22 @@ Tecnicamente si potrebbe trasformare un foglio Excel in MP3 (Excel → PDF → i
 
 # Integrazione con Nextcloud
 
-L'app `nextcloud-app/` (id `convertitore`, Nextcloud 30-36) aggiunge al menu di ogni file il sottomenu **Converti in…**, con i formati possibili per quel file. Funziona anche su più file selezionati insieme: in quel caso mostra solo i formati comuni a tutti.
+L'app `nextcloud-app/` (id `universal_converter`, Nextcloud 30-36) aggiunge al menu di ogni file il sottomenu **Converti in…**, con i formati possibili per quel file. Funziona anche su più file selezionati insieme: in quel caso mostra solo i formati comuni a tutti.
 
 ## Installazione
 
-1. Copia la cartella `nextcloud-app` in `custom_apps/convertitore` dell'installazione di Nextcloud, con proprietario l'utente del web server (di solito `www-data`, UID 33):
+1. Copia la cartella `nextcloud-app` in `custom_apps/universal_converter` dell'installazione di Nextcloud, con proprietario l'utente del web server (di solito `www-data`, UID 33):
 
    ```bash
-   cp -r nextcloud-app /var/www/html/custom_apps/convertitore
-   chown -R www-data:www-data /var/www/html/custom_apps/convertitore
+   cp -r nextcloud-app /var/www/html/custom_apps/universal_converter
+   chown -R www-data:www-data /var/www/html/custom_apps/universal_converter
    ```
 
 2. Attivala e indica l'indirizzo del convertitore. Deve essere raggiungibile **dal server Nextcloud**, non dal browser:
 
    ```bash
-   occ app:enable convertitore
-   occ config:app:set convertitore converter_url --value=http://192.0.2.10:8080
+   occ app:enable universal_converter
+   occ config:app:set universal_converter converter_url --value=http://192.0.2.10:8080
    ```
 
    Con Docker, `occ` si lancia così: `docker exec -u 33 <container-nextcloud> php occ ...`.
@@ -471,7 +471,7 @@ L'app `nextcloud-app/` (id `convertitore`, Nextcloud 30-36) aggiunge al menu di 
 3. Se nel convertitore la chiave è obbligatoria, crea nella pagina `/admin` una chiave con i permessi `formats`, `convert` e `jobs` e indicala all'app:
 
    ```bash
-   occ config:app:set convertitore converter_api_key --value=uconv_...
+   occ config:app:set universal_converter converter_api_key --value=uconv_...
    ```
 
 Finché `converter_url` non è impostato, l'app non mostra nessuna voce. Gli indirizzi privati (192.168.x.x, 10.x.x.x…) sono ammessi: l'app li autorizza esplicitamente nel client HTTP di Nextcloud.
@@ -486,6 +486,19 @@ Finché `converter_url` non è impostato, l'app non mostra nessuna voce. Gli ind
 Il salvataggio lo fa chi arriva prima: il browser oppure un **lavoro in background di Nextcloud**. Così il file arriva anche se l'utente chiude la pagina. Serve il cron di Nextcloud attivo (Impostazioni → Amministrazione → Impostazioni di base → Cron).
 
 L'elenco dei formati viene chiesto al convertitore e tenuto in cache per un'ora; se il convertitore non risponde, l'app riprova dopo un minuto. Dopo aver aggiunto formati al server, per vederli subito svuota la cache o aspetta un'ora.
+
+## Aggiornare dalla vecchia app `convertitore`
+
+Fino alla versione 1.0.1 l'id dell'app era `convertitore`; dalla 1.1.0 è `universal_converter`, l'id usato sull'App Store. Per Nextcloud è un'app diversa: va sostituita copiando le impostazioni.
+
+```bash
+url=$(occ config:app:get convertitore converter_url); key=$(occ config:app:get convertitore converter_api_key)
+occ app:disable convertitore && occ app:remove convertitore   # oppure cancella custom_apps/convertitore
+cp -r nextcloud-app /var/www/html/custom_apps/universal_converter   # proprietario www-data
+occ app:enable universal_converter
+occ config:app:set universal_converter converter_url --value="$url"
+occ config:app:set universal_converter converter_api_key --value="$key"
+```
 
 ## Problemi frequenti
 

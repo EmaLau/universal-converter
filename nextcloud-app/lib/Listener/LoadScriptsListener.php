@@ -1,10 +1,10 @@
 <?php
 declare(strict_types=1);
 
-namespace OCA\Convertitore\Listener;
+namespace OCA\UniversalConverter\Listener;
 
-use OCA\Convertitore\AppInfo\Application;
-use OCA\Convertitore\Service\ConverterClient;
+use OCA\UniversalConverter\AppInfo\Application;
+use OCA\UniversalConverter\Service\ConverterClient;
 use OCA\Files\Event\LoadAdditionalScriptsEvent;
 use OCP\AppFramework\Services\IInitialState;
 use OCP\EventDispatcher\Event;
@@ -26,6 +26,6 @@ class LoadScriptsListener implements IEventListener {
 		// La tabella dei formati arriva insieme alla pagina: il JS registra le azioni subito, senza fetch.
 		$this->initialState->provideLazyInitialState('formats', fn () => $this->client->formats());
 		Util::addTranslations(Application::APP_ID);
-		Util::addScript(Application::APP_ID, 'convertitore');
+		Util::addScript(Application::APP_ID, 'universal_converter');
 	}
 }

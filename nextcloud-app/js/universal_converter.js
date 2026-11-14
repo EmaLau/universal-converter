@@ -2,7 +2,7 @@
  * (window._nc_files_scope.v4_0), lo stesso che usa registerFileAction(). */
 (function () {
 	'use strict'
-	const stateEl = document.getElementById('initial-state-convertitore-formats')
+	const stateEl = document.getElementById('initial-state-universal_converter-formats')
 	if (!stateEl) return
 	let F
 	try { F = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(stateEl.value), c => c.charCodeAt(0)))) } catch (e) { return }
@@ -21,7 +21,7 @@
 	}
 
 	// traduzioni: l10n/<lingua>.js, caricate da LoadScriptsListener (testi originali in inglese)
-	const tr = (s, vars) => (window.t ? window.t('convertitore', s, vars, undefined, { escape: false }) : s.replace(/{(\w+)}/g, (m, k) => (vars && k in vars ? vars[k] : m)))
+	const tr = (s, vars) => (window.t ? window.t('universal_converter', s, vars, undefined, { escape: false }) : s.replace(/{(\w+)}/g, (m, k) => (vars && k in vars ? vars[k] : m)))
 	const NAMES = { docx: 'Word', doc: 'Word 97', xlsx: 'Excel', xls: 'Excel 97', pptx: 'PowerPoint', ppt: 'PowerPoint 97', md: 'Markdown', txt: tr('Text'), tex: 'LaTeX', azw3: 'Kindle' }
 	const ALIAS = { jpeg: 'jpg', jfif: 'jpg', tif: 'tiff', htm: 'html', markdown: 'md', tgz: 'tar.gz', tbz2: 'tar.bz2', txz: 'tar.xz', heif: 'heic' }
 	const extOf = name => {
@@ -55,7 +55,7 @@
 	const url = p => (window.OC && OC.generateUrl ? OC.generateUrl(p) : '/index.php' + p)
 	const token = () => (window.OC && OC.requestToken) || document.head.dataset.requesttoken || ''
 	async function api(method, path, body) {
-		const r = await fetch(url('/apps/convertitore' + path), {
+		const r = await fetch(url('/apps/universal_converter' + path), {
 			method,
 			headers: { 'Content-Type': 'application/json', requesttoken: token(), 'OCS-APIRequest': 'true' },
 			body: body ? JSON.stringify(body) : undefined,
@@ -83,7 +83,7 @@
 			})
 			window._nc_event_bus.emit('files:node:created', node)
 		} catch (e) {
-			console.debug('convertitore: aggiorna la cartella per vedere il file', e)
+			console.debug('universal_converter: aggiorna la cartella per vedere il file', e)
 		}
 	}
 
@@ -124,7 +124,7 @@
 	const common = nodes => nodes.map(targetsOf).reduce((a, b) => a.filter(x => b.includes(x)))
 
 	register({
-		id: 'convertitore',
+		id: 'universal_converter',
 		displayName: () => tr('Convert to…'),
 		iconSvgInline: () => ICON,
 		order: 30,
@@ -138,8 +138,8 @@
 	const rank = Object.keys(F.categories || {})  // ordine del server: documenti, fogli, ..., immagini, audio, video
 	all.sort((a, b) => (rank.indexOf(a) + 1 || 999) - (rank.indexOf(b) + 1 || 999))
 	all.forEach((t, i) => register({
-		id: 'convertitore-' + t.replace(/\W/g, '-'),
-		parent: 'convertitore',
+		id: 'universal_converter-' + t.replace(/\W/g, '-'),
+		parent: 'universal_converter',
 		displayName: () => label(t),
 		iconSvgInline: () => FILE_ICON,
 		order: i,

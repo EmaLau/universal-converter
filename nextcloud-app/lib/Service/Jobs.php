@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace OCA\Convertitore\Service;
+namespace OCA\UniversalConverter\Service;
 
-use OCA\Convertitore\BackgroundJob\FinalizeJob;
+use OCA\UniversalConverter\BackgroundJob\FinalizeJob;
 use OCP\BackgroundJob\IJobList;
 use OCP\Files\File;
 use OCP\Files\Folder;
@@ -30,7 +30,7 @@ class Jobs {
 		private LoggerInterface $logger,
 		private IL10N $l,
 	) {
-		$this->cache = $cacheFactory->createDistributed('convertitore-jobs');
+		$this->cache = $cacheFactory->createDistributed('universal_converter-jobs');
 	}
 
 	public function start(string $uid, int $fileId, string $target): string {
@@ -109,7 +109,7 @@ class Jobs {
 				'mime' => $new->getMimetype(), 'mtime' => $new->getMTime(), 'note' => $note,
 			]);
 		} catch (\Throwable $e) {
-			$this->logger->error('Convertitore: salvataggio fallito: ' . $e->getMessage(), ['app' => 'convertitore', 'exception' => $e]);
+			$this->logger->error('Convertitore: salvataggio fallito: ' . $e->getMessage(), ['app' => 'universal_converter', 'exception' => $e]);
 			return $this->finish($job, $info ?? [], ['state' => 'error', 'error' => $this->l->t('Saving failed: %s', [$e->getMessage()])]);
 		} finally {
 			$this->cache->remove("lock:$job");

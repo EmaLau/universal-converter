@@ -1,5 +1,5 @@
 OC.L10N.register(
-    "convertitore",
+    "universal_converter",
     {
         "Not logged in": "Non autenticato",
         "File not found": "File non trovato",

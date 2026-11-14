@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace OCA\Convertitore\Service;
+namespace OCA\UniversalConverter\Service;
 
 use OCP\Files\File;
 use OCP\Http\Client\IClientService;
@@ -22,12 +22,12 @@ class ConverterClient {
 		private LoggerInterface $logger,
 		private IL10N $l,
 	) {
-		$this->cache = $cacheFactory->createDistributed('convertitore');
+		$this->cache = $cacheFactory->createDistributed('universal_converter');
 	}
 
-	/** Indirizzo del server, impostato con: occ config:app:set convertitore converter_url --value=http://... */
+	/** Indirizzo del server, impostato con: occ config:app:set universal_converter converter_url --value=http://... */
 	public function baseUrl(): string {
-		return rtrim(trim($this->appConfig->getValueString('convertitore', 'converter_url', '')), '/');
+		return rtrim(trim($this->appConfig->getValueString('universal_converter', 'converter_url', '')), '/');
 	}
 
 	private function url(string $path): string {
@@ -42,8 +42,8 @@ class ConverterClient {
 		// Di solito il server sta su un indirizzo privato: il client HTTP di Nextcloud li blocca se non lo si autorizza.
 		$opts = $extra + ['nextcloud' => ['allow_local_address' => true], 'timeout' => 30, 'http_errors' => false];
 		// Chiave API creata nella pagina /admin del convertitore (permessi formats, convert e jobs), impostata con:
-		// occ config:app:set convertitore converter_api_key --value=uconv_...
-		$key = trim($this->appConfig->getValueString('convertitore', 'converter_api_key', ''));
+		// occ config:app:set universal_converter converter_api_key --value=uconv_...
+		$key = trim($this->appConfig->getValueString('universal_converter', 'converter_api_key', ''));
 		if ($key !== '') {
 			$opts['headers'] = ($opts['headers'] ?? []) + ['apikey' => $key];
 		}
@@ -73,7 +73,7 @@ class ConverterClient {
 				return $out;
 			}
 		} catch (\Throwable $e) {
-			$this->logger->warning('Convertitore non raggiungibile: ' . $e->getMessage(), ['app' => 'convertitore']);
+			$this->logger->warning('Convertitore non raggiungibile: ' . $e->getMessage(), ['app' => 'universal_converter']);
 		}
 		$this->cache->set('formats', ['inputs' => [], 'categories' => []], 60);
 		return ['inputs' => [], 'categories' => []];

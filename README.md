@@ -106,9 +106,9 @@ Other endpoints: `GET /api/formats` (supported formats), `GET /api/plan/{from}/{
 ## Nextcloud
 
 ```bash
-cp -r nextcloud-app /path/to/nextcloud/custom_apps/convertitore
-occ app:enable convertitore
-occ config:app:set convertitore converter_url --value=http://converter-address:8080
+cp -r nextcloud-app /path/to/nextcloud/custom_apps/universal_converter
+occ app:enable universal_converter
+occ config:app:set universal_converter converter_url --value=http://converter-address:8080
 ```
 
 The address must be reachable from the Nextcloud server. Installation and behaviour are explained in the [documentation](server/docs/documentation.md#nextcloud-integration), together with the [automatic PDFs](server/docs/documentation.md#automatic-pdfs-for-nextcloud).

@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace OCA\Convertitore\BackgroundJob;
+namespace OCA\UniversalConverter\BackgroundJob;
 
-use OCA\Convertitore\Service\Jobs;
+use OCA\UniversalConverter\Service\Jobs;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\BackgroundJob\QueuedJob;

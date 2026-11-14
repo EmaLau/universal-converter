@@ -6,7 +6,8 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
-- Nextcloud app 1.1.0, ready for the Nextcloud App Store: English texts with Italian translation (`l10n/`),
+- Nextcloud app 1.1.0, ready for the Nextcloud App Store, with the new id `universal_converter` (was `convertitore`;
+  existing installations: see *Nextcloud integration* in the documentation): English texts with Italian translation (`l10n/`),
   complete `info.xml` (validated against the App Store schema), `scripts/nextcloud-release.sh` to build and sign
   the release archive.
 

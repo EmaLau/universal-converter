@@ -37,6 +37,6 @@ jobs:
       - name: PHP
         run: find nextcloud-app -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: JavaScript
-        run: node --check nextcloud-app/js/convertitore.js
+        run: node --check nextcloud-app/js/universal_converter.js
       - name: info.xml
         run: python3 -c "import xml.etree.ElementTree as E; E.parse('nextcloud-app/appinfo/info.xml')"

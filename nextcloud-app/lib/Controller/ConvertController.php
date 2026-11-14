@@ -1,10 +1,10 @@
 <?php
 declare(strict_types=1);
 
-namespace OCA\Convertitore\Controller;
+namespace OCA\UniversalConverter\Controller;
 
-use OCA\Convertitore\Service\ConvertException;
-use OCA\Convertitore\Service\Jobs;
+use OCA\UniversalConverter\Service\ConvertException;
+use OCA\UniversalConverter\Service\Jobs;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
@@ -21,7 +21,7 @@ class ConvertController extends Controller {
 		private IUserSession $userSession,
 		private IL10N $l,
 	) {
-		parent::__construct('convertitore', $request);
+		parent::__construct('universal_converter', $request);
 	}
 
 	private function uid(): string {
