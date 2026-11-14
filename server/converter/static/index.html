@@ -10,21 +10,21 @@
   --bg:#f6f7fb; --surface:#fff; --surface-2:#eef0f6; --text:#171a2b; --muted:#646b85; --line:#e2e5ef;
   --accent:#4f46e5; --accent-hover:#4338ca; --accent-soft:#eef0ff; --accent-2:#06b6d4;
   --ok:#12a150; --ok-soft:#e7f7ee; --err:#dc2626; --err-soft:#fdecec;
-  --c-doc:#3b6fe0; --c-sheet:#16975a; --c-slide:#e06a1f; --c-img:#c53aa0; --c-audio:#7c4fe0; --c-video:#e0453b; --c-book:#b07818; --c-arch:#5b6475; --c-draw:#0e9494; --c-sub:#d4497a; --c-data:#4b7f2a; --c-font:#8a5a2b;
+  --c-doc:#3b6fe0; --c-sheet:#16975a; --c-slide:#e06a1f; --c-img:#c53aa0; --c-audio:#7c4fe0; --c-video:#e0453b; --c-book:#b07818; --c-arch:#5b6475; --c-draw:#0e9494; --c-sub:#d4497a; --c-data:#4b7f2a; --c-font:#8a5a2b; --c-pdf:#e5322d;
   --shadow:0 1px 2px rgba(23,26,43,.05),0 6px 20px rgba(23,26,43,.06); --radius:16px;
 }
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
   --bg:#0e1018; --surface:#161926; --surface-2:#1f2333; --text:#e8eaf4; --muted:#9aa1bd; --line:#2a2f44;
   --accent:#8b83ff; --accent-hover:#a29cff; --accent-soft:#23234a; --accent-2:#22d3ee;
   --ok:#3ddc84; --ok-soft:#14301f; --err:#ff6b6b; --err-soft:#3a1e1e;
-  --c-doc:#6d9cff; --c-sheet:#47c27d; --c-slide:#ff9752; --c-img:#ec6fcc; --c-audio:#a787ff; --c-video:#ff6f6f; --c-book:#e0a54a; --c-arch:#9aa3b5; --c-draw:#3fc4c4; --c-sub:#ff7aa8; --c-data:#8fd16a; --c-font:#d9a066;
+  --c-doc:#6d9cff; --c-sheet:#47c27d; --c-slide:#ff9752; --c-img:#ec6fcc; --c-audio:#a787ff; --c-video:#ff6f6f; --c-book:#e0a54a; --c-arch:#9aa3b5; --c-draw:#3fc4c4; --c-sub:#ff7aa8; --c-data:#8fd16a; --c-font:#d9a066; --c-pdf:#ff6b5e;
   --shadow:0 1px 2px rgba(0,0,0,.35),0 8px 24px rgba(0,0,0,.3);
 }}
 :root[data-theme="dark"]{
   --bg:#0e1018; --surface:#161926; --surface-2:#1f2333; --text:#e8eaf4; --muted:#9aa1bd; --line:#2a2f44;
   --accent:#8b83ff; --accent-hover:#a29cff; --accent-soft:#23234a; --accent-2:#22d3ee;
   --ok:#3ddc84; --ok-soft:#14301f; --err:#ff6b6b; --err-soft:#3a1e1e;
-  --c-doc:#6d9cff; --c-sheet:#47c27d; --c-slide:#ff9752; --c-img:#ec6fcc; --c-audio:#a787ff; --c-video:#ff6f6f; --c-book:#e0a54a; --c-arch:#9aa3b5; --c-draw:#3fc4c4; --c-sub:#ff7aa8; --c-data:#8fd16a; --c-font:#d9a066;
+  --c-doc:#6d9cff; --c-sheet:#47c27d; --c-slide:#ff9752; --c-img:#ec6fcc; --c-audio:#a787ff; --c-video:#ff6f6f; --c-book:#e0a54a; --c-arch:#9aa3b5; --c-draw:#3fc4c4; --c-sub:#ff7aa8; --c-data:#8fd16a; --c-font:#d9a066; --c-pdf:#ff6b5e;
   --shadow:0 1px 2px rgba(0,0,0,.35),0 8px 24px rgba(0,0,0,.3);
 }
 *{box-sizing:border-box}
@@ -91,6 +91,14 @@ select{background:var(--surface-2);border:1px solid var(--line);border-radius:10
 .formats table{border-collapse:collapse;margin-top:12px;width:100%}
 .formats td{border-top:1px solid var(--line);padding:6px 8px;vertical-align:top}
 .formats td:first-child{white-space:nowrap;font-weight:600;color:var(--text)}
+.opts{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin:0 0 18px;display:flex;flex-wrap:wrap;gap:14px 24px;align-items:flex-end}
+.opts label{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--muted);flex:1 1 220px}
+.opts label.check{flex-direction:row;align-items:center;gap:8px;color:var(--text)}
+.opts input[type=text]{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.opts select{max-width:none}
+.note{color:var(--muted);font-size:13px;margin:-6px 0 18px;text-align:center}
+.mv{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;cursor:pointer;width:32px;height:32px;line-height:1}
+.mv:disabled{opacity:.35;cursor:default}
 .hidden{display:none!important}
 @media (max-width:640px){
   .file{grid-template-columns:auto 1fr}
@@ -115,7 +123,7 @@ select{background:var(--surface-2);border:1px solid var(--line);border-radius:10
 <main>
   <section id="tools">
     <h1>Converti qualsiasi file</h1>
-    <p class="lead">Documenti, fogli di calcolo, presentazioni, immagini, audio, video, sottotitoli, ebook, dati, font e archivi. Niente cloud: tutto avviene sul tuo server.</p>
+    <p class="lead">Documenti, fogli di calcolo, presentazioni, immagini, audio, video, sottotitoli, ebook, dati, font e archivi, più gli strumenti per i PDF. Niente cloud: tutto avviene sul tuo server.</p>
     <div class="filters" id="filters"></div>
     <div class="grid" id="grid"></div>
     <details class="formats" id="formats"><summary>Tutti i formati supportati</summary><table id="ftable"></table></details>
@@ -125,6 +133,7 @@ select{background:var(--surface-2);border:1px solid var(--line);border-radius:10
     <button class="back" id="back">← Tutti gli strumenti</button>
     <h1 id="wtitle">Converti file</h1>
     <p class="lead" id="wlead"></p>
+    <div class="opts hidden" id="opts"></div>
     <div class="drop" id="drop">
       <button class="btn" id="pick">Seleziona i file</button>
       <p>oppure trascinali qui</p>
@@ -177,7 +186,8 @@ const TOOLS = [
   ["Archivio in TAR.ZST","Compressione moderna","zip 7z rar tar tar.gz iso","tar.zst"],
 ];
 const $ = s => document.querySelector(s);
-let F = {inputs:{},categories:{}}, tool = null, items = [], nextId = 1;
+let F = {inputs:{},categories:{}}, P = [], tool = null, ptool = null, items = [], nextId = 1;
+const PDF_ICON = {merge:"1+2",split:"1÷2",extract:"PAG",remove:"−PAG",rotate:"↻",compress:"KB↓",ocr:"OCR"};
 
 const label = e => (e||"?").toUpperCase();
 const cat = e => F.categories[e] || "Documento";
@@ -191,8 +201,9 @@ function toolSources(t){ return t[2].startsWith("@") ? Object.keys(F.inputs).fil
 
 async function load(){
   try{ F = await (await fetch("api/formats")).json(); }catch(e){ $("#grid").textContent="Il convertitore non risponde."; return; }
+  try{ P = (await (await fetch("api/pdf")).json()).tools || []; }catch(e){ P = []; }
   if(F.retain_hours) $("#privacy").title = `I file vengono elaborati su questo server e cancellati dopo ${F.retain_hours} ore`;
-  const cats = ["Tutti", ...new Set(TOOLS.map(t=>cat(toolSources(t)[0])))];
+  const cats = ["Tutti", ...(P.length?["PDF"]:[]), ...new Set(TOOLS.map(t=>cat(toolSources(t)[0])))];
   const filters = $("#filters");
   cats.forEach((c,i)=>filters.append(el("button",{class:"chip","aria-pressed":i===0?"true":"false",onclick:e=>{
     filters.querySelectorAll(".chip").forEach(x=>x.setAttribute("aria-pressed","false")); e.target.setAttribute("aria-pressed","true"); renderGrid(c);}},c)));
@@ -204,19 +215,44 @@ async function load(){
 function renderGrid(c){
   const g=$("#grid"); g.replaceChildren();
   if(c==="Tutti") g.append(el("button",{class:"tool any",onclick:()=>openTool(null)},el("div",{class:"ic"},"ANY"),el("b",{},"Qualsiasi formato"),el("span",{},"Carica un file e scegli in cosa convertirlo")));
+  if(c==="Tutti"||c==="PDF") P.forEach(t=>g.append(el("button",{class:"tool",onclick:()=>{location.hash="pdf="+t.name;}},
+    el("div",{class:"ic",style:"background:var(--c-pdf);font-size:"+(t.name==="rotate"?"20px":"12px")},PDF_ICON[t.name]||"PDF"),el("b",{},t.title),el("span",{},t.description))));
+  if(c==="PDF") return;
   TOOLS.forEach((t,i)=>{ const src=toolSources(t); if(!src.some(s=>(F.inputs[s]||[]).includes(t[3]))) return;
     if(c!=="Tutti" && cat(src[0])!==c) return;
     g.append(el("button",{class:"tool",onclick:()=>openTool(i)},el("div",{class:"ic",style:`background:${color(t[4]||(t[3]==="pdf"?src[0]:t[3]))}`},label(t[4]||(t[3]==="pdf"?src[0]:t[3])).slice(0,4)),el("b",{},t[0]),el("span",{},t[1]))); });
 }
-function route(){ const m=location.hash.match(/^#tool=(\w+|any)$/); if(m){ const i=m[1]==="any"?null:+m[1]; show(i); } else { $("#tools").classList.remove("hidden"); $("#work").classList.add("hidden"); $("#footer").classList.add("hidden"); } }
+function route(){ const m=location.hash.match(/^#tool=(\w+|any)$/), pm=location.hash.match(/^#pdf=(\w+)$/);
+  if(pm && P.some(t=>t.name===pm[1])) showPdf(P.find(t=>t.name===pm[1]));
+  else if(m){ const i=m[1]==="any"?null:+m[1]; show(i); } else { $("#tools").classList.remove("hidden"); $("#work").classList.add("hidden"); $("#footer").classList.add("hidden"); } }
 function openTool(i){ location.hash = "tool="+(i===null?"any":i); }
 function show(i){
-  tool = (i===null||!TOOLS[i]) ? null : TOOLS[i];
+  tool = (i===null||!TOOLS[i]) ? null : TOOLS[i]; ptool = null; $("#opts").classList.add("hidden");
   $("#tools").classList.add("hidden"); $("#work").classList.remove("hidden");
   $("#wtitle").textContent = tool ? tool[0] : "Converti qualsiasi file";
   $("#wlead").textContent = tool ? `${tool[1]} → ${label(tool[3])}` : "Carica uno o più file, poi scegli il formato di arrivo per ciascuno.";
   $("#input").accept = tool ? toolSources(tool).map(e=>"."+e).join(",") : "";
   items = items.filter(it=>it.state!=="ready"); renderFiles(); window.scrollTo(0,0);
+}
+function showPdf(t){
+  tool = null; ptool = t;
+  $("#tools").classList.add("hidden"); $("#work").classList.remove("hidden");
+  $("#wtitle").textContent = t.title;
+  $("#wlead").textContent = t.description + (t.max_files>1 ? ". Usa le frecce per cambiare l'ordine." : "");
+  $("#input").accept = ".pdf,application/pdf";
+  const box=$("#opts"); box.replaceChildren();
+  for(const o of t.options){
+    const id="opt-"+o.name;
+    if(o.type==="select") box.append(el("label",{},o.label,el("select",{id},o.choices.map(c=>el("option",{value:c[0],selected:c[0]===o.default},c[1])))));
+    else if(o.type==="bool") box.append(el("label",{class:"check"},el("input",{type:"checkbox",id}),o.label));
+    else box.append(el("label",{},o.label+(o.required?" *":""),el("input",{type:"text",id,placeholder:o.placeholder||"",value:o.type==="lang"?o.default:"",autocomplete:"off"})));
+  }
+  box.classList.toggle("hidden", !t.options.length);
+  items = items.filter(it=>!["ready","used","unsupported"].includes(it.state)); renderFiles(); window.scrollTo(0,0);
+}
+function pdfOptions(fd){
+  for(const o of ptool.options){ const n=document.getElementById("opt-"+o.name); if(n) fd.append(o.name, o.type==="bool" ? (n.checked?"true":"") : n.value.trim()); }
+  return fd;
 }
 $("#home").onclick = $("#back").onclick = () => { location.hash=""; };
 $("#pick").onclick = () => $("#input").click();
@@ -229,7 +265,8 @@ document.addEventListener("dragover",e=>e.preventDefault()); document.addEventLi
 
 function addFiles(list){
   for(const f of list){
-    const ext=extOf(f.name), targets=F.inputs[ext]||[];
+    const ext=extOf(f.name), targets=ptool ? [] : (F.inputs[ext]||[]);
+    if(ptool){ items.push({id:nextId++, file:f, ext, targets, target:null, state: ext==="pdf" ? (F.max_upload_bytes&&f.size>F.max_upload_bytes ? "error" : "ready") : "unsupported", fatal:!!(F.max_upload_bytes&&f.size>F.max_upload_bytes), error:`file troppo grande (massimo ${fmtSize(F.max_upload_bytes)})`}); continue; }
     if(F.max_upload_bytes && f.size>F.max_upload_bytes){ items.push({id:nextId++, file:f, ext, targets:[], target:null, state:"error", error:`file troppo grande (massimo ${fmtSize(F.max_upload_bytes)})`, fatal:true}); continue; }
     let target = tool && targets.includes(tool[3]) ? tool[3] : (targets.includes("pdf")&&cat(ext)!=="Immagine" ? "pdf" : targets[0]);
     items.push({id:nextId++, file:f, ext, targets, target, state: targets.length?"ready":"unsupported"});
@@ -238,20 +275,26 @@ function addFiles(list){
 }
 function renderFiles(){
   const box=$("#files"); box.replaceChildren();
-  for(const it of items){
+  const visible = items.filter(i=>i.state!=="used"), merge = ptool && ptool.max_files>1;
+  for(const it of visible){
     const opts = it.targets.map(t=>el("option",{value:t,selected:t===it.target},label(t)+(NAMES[t]&&NAMES[t]!==label(t)?` (${NAMES[t]})`:"")));
     const sel = el("select",{disabled:it.state!=="ready", "aria-label":"Formato di arrivo",onchange:e=>{it.target=e.target.value; syncAll();}}, opts);
     let meta, right;
-    if(it.state==="unsupported") meta=el("span",{class:"err"},`Formato .${it.ext||"?"} non supportato`);
+    if(it.state==="unsupported") meta=el("span",{class:"err"},ptool?"Qui servono file PDF":`Formato .${it.ext||"?"} non supportato`);
     else if(it.state==="error") meta=el("span",{class:"err",title:it.error},"Errore: "+it.error.slice(0,160));
-    else if(it.state==="done") meta=el("span",{class:"ok"},`Pronto: ${it.out_name} · ${fmtSize(it.size)}`);
+    else if(it.state==="done") meta=el("span",{class:"ok"},`Pronto: ${it.out_name} · ${fmtSize(it.size)}${it.note?" · "+it.note:""}`);
     else if(it.state==="uploading") meta=el("span",{},`Caricamento ${Math.round((it.up||0)*100)}%`);
     else if(it.state==="queued") meta=el("span",{},`In coda${it.position>1?` (posizione ${it.position})`:""}…`);
     else if(it.state==="running") meta=el("span",{},it.step||"Conversione…");
     else meta=el("span",{},fmtSize(it.file.size));
     if(it.state==="done") right=el("a",{class:"dl",href:`api/jobs/${it.job}/download`,download:it.out_name},"Scarica");
+    else if(it.state==="error" && it.sources) right=el("button",{class:"btn small ghost",onclick:()=>{it.sources.forEach(s=>s.state="ready");items=items.filter(x=>x!==it);renderFiles();}},"Riprova");
     else if(it.state==="error" && !it.fatal) right=el("button",{class:"btn small ghost",onclick:()=>{it.state="ready";renderFiles();}},"Riprova");
     else if(it.state==="error") right="";
+    else if(ptool && it.state==="ready" && merge){ const r=visible.filter(i=>i.state==="ready"), k=r.indexOf(it);
+      const mv=d=>{ const a=items.indexOf(it), b=items.indexOf(r[k+d]); [items[a],items[b]]=[items[b],items[a]]; renderFiles(); };
+      right=el("span",{class:"actions"},el("button",{class:"mv",title:"Sposta su","aria-label":"Sposta su",disabled:k===0,onclick:()=>mv(-1)},"↑"),el("button",{class:"mv",title:"Sposta giù","aria-label":"Sposta giù",disabled:k===r.length-1,onclick:()=>mv(1)},"↓")); }
+    else if(ptool) right="";
     else right=sel;
     const busy=["uploading","queued","running"].includes(it.state);
     const p = it.state==="uploading" ? (it.up||0) : it.state==="running" ? it.progress : null;
@@ -266,22 +309,35 @@ function renderFiles(){
 function syncAll(){
   const ready=items.filter(i=>i.state==="ready"), done=items.filter(i=>i.state==="done");
   $("#footer").classList.toggle("hidden", !items.length || $("#work").classList.contains("hidden"));
-  $("#go").disabled=!ready.length;
-  $("#go").textContent = ready.length>1 ? `Converti ${ready.length} file` : "Converti";
+  const merge = ptool && ptool.max_files>1;
+  $("#go").disabled = merge ? ready.length<2 : !ready.length;
+  $("#go").textContent = ptool ? ptool.action+(ready.length>1&&!merge?` ${ready.length} PDF`:"") : ready.length>1 ? `Converti ${ready.length} file` : "Converti";
   $("#dlall").classList.toggle("hidden", done.length<2);
   const common = ready.length ? ready.map(i=>i.targets).reduce((a,b)=>a.filter(x=>b.includes(x))) : [];
   const all=$("#all"), same=ready.length&&ready.every(i=>i.target===ready[0].target)?ready[0].target:"";
   all.replaceChildren(el("option",{value:"",selected:!same},same?"—":"(diversi)"), ...common.map(t=>el("option",{value:t,selected:t===same},label(t))));
-  all.closest("label").classList.toggle("hidden", ready.length<2 || !common.length);
+  all.closest("label").classList.toggle("hidden", !!ptool || ready.length<2 || !common.length);
 }
 $("#all").onchange = e => { if(!e.target.value) return; items.forEach(i=>{ if(i.state==="ready") i.target=e.target.value; }); renderFiles(); };
-$("#go").onclick = () => { items.filter(i=>i.state==="ready").forEach(start); };
+$("#go").onclick = () => {
+  const ready=items.filter(i=>i.state==="ready");
+  if(!ptool) return ready.forEach(start);
+  if(ptool.max_files>1){
+    const fd=pdfOptions(new FormData()); ready.forEach(i=>{ fd.append("files",i.file,i.file.name); i.state="used"; });
+    const res={id:nextId++, file:{name:ready[0].file.name.replace(/\.pdf$/i,"")+"-unito.pdf", size:ready.reduce((a,i)=>a+i.file.size,0)}, ext:"pdf", targets:[], sources:ready, state:"uploading"};
+    items.push(res); send(res, "api/pdf/"+ptool.name, fd); return;
+  }
+  ready.forEach(it=>{ const fd=pdfOptions(new FormData()); fd.append("files",it.file,it.file.name); send(it, "api/pdf/"+ptool.name, fd); });
+};
 $("#dlall").onclick = () => { items.filter(i=>i.state==="done").forEach((it,k)=>setTimeout(()=>{ const a=el("a",{href:`api/jobs/${it.job}/download`,download:it.out_name}); document.body.append(a); a.click(); a.remove(); }, k*400)); };
 
 function start(it){
-  it.state="uploading"; it.up=0; renderFiles();
   const fd=new FormData(); fd.append("target",it.target); fd.append("file",it.file,it.file.name);
-  const x=new XMLHttpRequest(); x.open("POST","api/jobs");
+  send(it, "api/jobs", fd);
+}
+function send(it, url, fd){
+  it.state="uploading"; it.up=0; renderFiles();
+  const x=new XMLHttpRequest(); x.open("POST",url);
   let last=0; x.upload.onprogress=e=>{ if(e.lengthComputable){ it.up=e.loaded/e.total; if(Date.now()-last>250){last=Date.now();renderFiles();} } };
   x.onload=()=>{ let r={}; try{r=JSON.parse(x.responseText)}catch(e){}
     if(x.status===201){ it.job=r.id; it.state=r.state; poll(it); }
@@ -295,7 +351,7 @@ async function poll(it){
     await new Promise(r=>setTimeout(r, it.state==="queued"?1500:1000));
     try{ const r=await (await fetch(`api/jobs/${it.job}`)).json();
       if(r.detail){ it.state="error"; it.error=r.detail; }
-      else Object.assign(it,{state:r.state,progress:r.progress,step:r.step,error:r.error,out_name:r.out_name,size:r.size,position:r.position});
+      else Object.assign(it,{state:r.state,progress:r.progress,step:r.step,error:r.error,out_name:r.out_name,size:r.size,position:r.position,note:r.note});
     }catch(e){ /* rete instabile: riprova */ }
     renderFiles();
   }

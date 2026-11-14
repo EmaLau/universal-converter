@@ -4,9 +4,11 @@
 
 🇬🇧 **English** · 🇮🇹 [Italiano](README.it.md)
 
-**A self-hosted file converter, in the spirit of iLovePDF.** Documents, spreadsheets, presentations, images, audio, video, subtitles, ebooks, data, fonts and archives: about **200 formats** and more than **3,000 combinations**, all on your own server. Files never leave your network and are deleted automatically after a few hours.
+**A self-hosted file converter, in the spirit of iLovePDF.** Documents, spreadsheets, presentations, images, audio, video, subtitles, ebooks, data, fonts and archives: about **200 formats** and more than **3,000 combinations**, plus **PDF tools** (merge, split, compress, rotate, OCR), all on your own server. Files never leave your network and are deleted automatically after a few hours.
 
-![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)
+[![Tests](https://github.com/EmaLau/universal-converter/actions/workflows/tests.yml/badge.svg)](https://github.com/EmaLau/universal-converter/actions/workflows/tests.yml)
+[![Release](https://img.shields.io/github/v/release/EmaLau/universal-converter)](https://github.com/EmaLau/universal-converter/releases)
+[![Docker image](https://img.shields.io/badge/ghcr.io-universal--converter-2496ED?logo=docker&logoColor=white)](https://github.com/EmaLau/universal-converter/pkgs/container/universal-converter)
 ![Python](https://img.shields.io/badge/python-3.11+-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![Nextcloud](https://img.shields.io/badge/Nextcloud-30--36-0082C9?logo=nextcloud&logoColor=white)
@@ -15,6 +17,7 @@
 ## Features
 
 - **Web page** with ready-made tools ("Word to PDF", "HEIC to JPG", "JSON to Excel"…), drag and drop, and batch conversion of several files at once.
+- **PDF tools**: merge several PDFs in the chosen order, split by page or range, extract or remove pages, rotate, compress, and **OCR** scans to make them searchable (Tesseract, Italian and English included).
 - **Chained conversions**: when no single program can do a conversion, the server finds the shortest path. Markdown → PDF becomes Pandoc + LibreOffice, JSON → Excel becomes JSON → CSV → XLSX.
 - **Fast where possible**: videos with compatible codecs are copied without re-encoding, in a few seconds.
 - **JSON API** for scripts and other applications, with **API keys** (per-function permissions, revocable, managed on the `/admin` page) and interactive docs at `/apidocs`.
@@ -39,12 +42,15 @@ You need Docker with Docker Compose.
 ```bash
 git clone https://github.com/EmaLau/universal-converter.git
 cd universal-converter
-docker compose up -d --build
+docker compose pull      # ready-made image from ghcr.io (linux/amd64)
+docker compose up -d
 ```
 
 Open <http://localhost:8080>. The built-in documentation (in Italian) is at <http://localhost:8080/docs>; the English version is [here](server/docs/documentation.md).
 
-The first build downloads LibreOffice, FFmpeg, Calibre and the other programs (about 500 MB), so it takes a few minutes. Later builds are almost instant.
+To build the image yourself instead (other architectures, or a different user ID with `CONVERTER_UID`/`CONVERTER_GID`), run `docker compose up -d --build`. The first build downloads LibreOffice, FFmpeg, Calibre and the other programs, so it takes a few minutes.
+
+Without cloning, a single command is enough: `docker run -d -p 127.0.0.1:8080:8080 -v converter-work:/work ghcr.io/emalau/universal-converter:latest`.
 
 To check that every conversion works:
 
@@ -82,6 +88,17 @@ curl -s http://localhost:8080/api/jobs/$id
 curl -OJ http://localhost:8080/api/jobs/$id/download
 ```
 
+PDF tools work the same way, with one or more files and the tool's options:
+
+```bash
+# merge in this order, then compress
+curl -s -F files=@a.pdf -F files=@b.pdf http://localhost:8080/api/pdf/merge
+curl -s -F files=@scan.pdf -F lang=ita+eng http://localhost:8080/api/pdf/ocr
+curl -s -F files=@big.pdf -F level=high http://localhost:8080/api/pdf/compress
+```
+
+Tools: `merge`, `split`, `extract`, `remove`, `rotate`, `compress`, `ocr` (list and options at `GET /api/pdf`).
+
 Other endpoints: `GET /api/formats` (supported formats), `GET /api/plan/{from}/{to}` (planned steps), `DELETE /api/jobs/{id}` (delete now), `GET /healthz`. Details are in the [API documentation](server/docs/documentation.md#api) and, on every instance, at `/apidocs`.
 
 **API keys.** Set `CONVERTER_ADMIN_PASSWORD` and open `/admin` to create keys with a name and permissions (`formats`, `convert`, `jobs`). Scripts send them in the `apikey` header (`curl -H "apikey: uconv_..." ...`); the web page needs none. A switch on `/admin` makes the key required for the API. See [API keys](server/docs/documentation.md#api-keys).
@@ -102,7 +119,7 @@ The address must be reachable from the Nextcloud server. Installation and behavi
 server/            web service (FastAPI) and Dockerfile
   converter/       code: API, job queue, conversion graph, converters
   docs/            full documentation (the Italian file becomes the /docs page)
-  tests/           pytest tests
+  tests/           pytest tests (run on every push by GitHub Actions)
   selftest.py      real test of every conversion
 nextcloud-app/     Nextcloud app "Converti in" (Convert to)
 pdf-watcher/       automatic PDFs for Nextcloud
@@ -117,6 +134,10 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[test]"
 ```
 
 Adding a format takes one function in `tools.py` and one line in `graph.py`: menus, chained paths and the Nextcloud app update themselves. The step-by-step guide is in the [Development](server/docs/documentation.md#development) section.
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Changes between versions are in [CHANGELOG.md](CHANGELOG.md).
 
 ## Documentation
 

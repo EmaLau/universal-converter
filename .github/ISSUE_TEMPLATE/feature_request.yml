@@ -1,0 +1,20 @@
+name: Feature request
+description: A new format, PDF tool or improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: e.g. "convert DjVu to PDF" or "add page numbers to a PDF"
+    validations:
+      required: true
+  - type: input
+    id: program
+    attributes:
+      label: Which program could do it?
+      description: Every converter is an open-source program available in Debian 13 (LibreOffice, FFmpeg, Pandoc, ...)
+  - type: textarea
+    id: why
+    attributes:
+      label: Why is it useful?

@@ -12,12 +12,15 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from .config import Settings
 from .formats import ext_of, normalize, safe_filename, stem_of
 from .graph import Graph
 from .runner import ConvError
+
+if TYPE_CHECKING:
+    from .pdftools import PdfTool
 
 CHUNK = 4 * 1024 * 1024
 JANITOR_EVERY = 600
@@ -52,11 +55,18 @@ class Job:
     error: str = ""
     out_path: Path | None = None
     out_name: str = ""
+    note: str = ""                       # informazione per l'utente sul risultato (es. "ridotto del 40%")
+    tool: PdfTool | None = None          # strumento PDF al posto di una conversione
+    opts: dict = field(default_factory=dict)
+    inputs: list[Path] = field(default_factory=list)  # file caricati per uno strumento PDF
     task: asyncio.Task | None = field(default=None, repr=False)
 
     @property
     def input_path(self) -> Path:
         return self.dir / f"input.{self.src_ext}"
+
+    def input_files(self) -> list[Path]:
+        return self.inputs or [self.input_path]
 
 
 class JobManager:
@@ -106,6 +116,36 @@ class JobManager:
         job.task = asyncio.create_task(self._process(job))
         return job
 
+    async def create_tool(self, uploads: list[tuple[Upload, str | None]], tool: PdfTool, opts: dict,
+                          meta: str = "") -> Job:
+        """Lavoro di uno strumento PDF: uno o piu' file caricati, nell'ordine ricevuto."""
+        if not tool.min_files <= len(uploads) <= tool.max_files:
+            if tool.max_files == 1:
+                raise JobError(400, f"{tool.title}: carica un PDF alla volta")
+            raise JobError(400, f"{tool.title}: servono da {tool.min_files} a {tool.max_files} PDF")
+        names = [safe_filename(name) for _, name in uploads]
+        bad = [n for n in names if ext_of(n) != "pdf"]
+        if bad:
+            raise JobError(400, f"{tool.title} accetta solo PDF: {bad[0]}")
+        if len(self.jobs) >= self.settings.max_queue:
+            raise JobError(503, "Troppi lavori in corso: riprova tra poco")
+        job_id = uuid.uuid4().hex
+        job = Job(id=job_id, dir=self.settings.jobs_dir / job_id, filename=names[0], src_ext="pdf",
+                  target="zip" if tool.name == "split" else "pdf", meta=meta[:2000], tool=tool, opts=opts)
+        job.dir.mkdir(parents=True)
+        try:
+            for i, (upload, _) in enumerate(uploads, 1):
+                path = job.dir / f"input-{i:03d}.pdf"
+                if await self._save(upload, path) == 0:
+                    raise JobError(400, f"File vuoto: {names[i - 1]}")
+                job.inputs.append(path)
+        except BaseException:
+            shutil.rmtree(job.dir, ignore_errors=True)
+            raise
+        self.jobs[job.id] = job
+        job.task = asyncio.create_task(self._process(job))
+        return job
+
     async def _save(self, upload: Upload, dest: Path) -> int:
         size = 0
         with dest.open("wb") as fh:
@@ -135,6 +175,10 @@ class JobManager:
         d = {"id": job.id, "filename": job.filename, "target": job.target, "state": job.state,
              "progress": job.progress, "step": job.step, "error": job.error, "meta": job.meta,
              "created": job.created, "finished": job.finished or None}
+        if job.tool:
+            d |= {"tool": job.tool.name, "files": len(job.inputs)}
+        if job.note:
+            d["note"] = job.note
         if job.state == "done" and job.out_path:
             d |= {"out_name": job.out_name, "size": job.out_path.stat().st_size}
         if job.state == "queued":
@@ -151,7 +195,7 @@ class JobManager:
         async with self._sem:
             job.state, job.started = "running", time.time()
             try:
-                await self._run_steps(job)
+                await (self._run_tool(job) if job.tool else self._run_steps(job))
                 job.state, job.progress, job.step = "done", 1.0, ""
             except asyncio.CancelledError:
                 job.state, job.error = "error", "annullato"
@@ -162,7 +206,8 @@ class JobManager:
                 job.state, job.error = "error", f"errore interno: {e!r}"
             finally:
                 job.finished = time.time()
-                job.input_path.unlink(missing_ok=True)
+                for f in job.input_files():
+                    f.unlink(missing_ok=True)
 
     async def _run_steps(self, job: Job) -> None:
         path = self.graph.plan(job.src_ext, job.target)
@@ -185,6 +230,19 @@ class JobManager:
         multi = cur.suffix == ".zip" and job.target != "zip"  # piu' file (es. pagine di un PDF) in uno zip
         job.out_path = cur
         job.out_name = f"{stem_of(job.filename)}.{'zip' if multi else job.target}"
+
+    async def _run_tool(self, job: Job) -> None:
+        assert job.tool
+        job.step, job.progress = job.tool.title, None
+        wd = job.dir / "step1"
+        wd.mkdir()
+        try:
+            out, name = await job.tool.fn(job, job.inputs, job.opts, wd)
+        except ValueError as e:  # OptionError: pagine che non esistono in questo PDF
+            raise ConvError(str(e)) from None
+        if not out.exists() or out.stat().st_size == 0:
+            raise ConvError(f"{job.tool.title}: risultato vuoto")
+        job.out_path, job.out_name, job.step = out, safe_filename(name), ""
 
     async def _janitor_loop(self) -> None:
         while True:

@@ -4,6 +4,7 @@ Dentro il container (dove ci sono gli strumenti per creare i file di prova):
     docker compose exec converter python3 /app/selftest.py [--all] [--write-disabled]
 
 Senza --all prova un campione rappresentativo; con --all ogni coppia sorgente -> destinazione dei campioni.
+Prova anche gli strumenti PDF disponibili (unire, dividere, estrarre, togliere, ruotare, comprimere, OCR).
 Con --write-disabled salva le conversioni fallite in WORK_DIR/disabled.json: al prossimo avvio il server
 le toglie dai menu. Esce con codice 1 se almeno una conversione fallisce.
 """
@@ -49,6 +50,8 @@ def make_samples(d: Path) -> None:
     sh(d, "magick", "s.png", "s.jpg")
     sh(d, "magick", "s.png", "s.pdf")
     sh(d, "magick", "s.png", "s.eps")
+    sh(d, "magick", "-size", "800x400", "xc:white", "-pointsize", "48", "-annotate", "+40+200", "Testo da riconoscere",
+       "scan.pdf")  # una "scansione": solo immagine, niente testo
     (d / "s.srt").write_text("1\n00:00:01,000 --> 00:00:03,000\nCiao mondo\n\n2\n00:00:04,000 --> 00:00:06,000\nSeconda riga\n")
     (d / "s.json").write_text('{"persone": [{"nome": "Anna", "eta": 30, "tag": ["a", "b"]}, {"nome": "Luca", "eta": 25}]}')
     (d / "s.yaml").write_text("titolo: Prova\nelementi:\n  - uno\n  - due\n")
@@ -77,14 +80,20 @@ class Api:
         with urllib.request.urlopen(urllib.request.Request(self.base + path, headers=self.auth), timeout=30) as r:
             return json.load(r)
 
-    def post_file(self, path: Path, target: str) -> dict:
+    def post(self, url: str, fields: dict[str, str], files: list[tuple[str, Path]]) -> dict:
         b = uuid.uuid4().hex
-        body = (f"--{b}\r\nContent-Disposition: form-data; name=\"target\"\r\n\r\n{target}\r\n"
-                f"--{b}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{path.name}\"\r\n"
-                "Content-Type: application/octet-stream\r\n\r\n").encode() + path.read_bytes() + f"\r\n--{b}--\r\n".encode()
-        req = urllib.request.Request(self.base + "/api/jobs", body, {"Content-Type": f"multipart/form-data; boundary={b}", **self.auth})
+        body = b"".join(f"--{b}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n".encode()
+                        for k, v in fields.items())
+        for name, path in files:
+            body += (f"--{b}\r\nContent-Disposition: form-data; name=\"{name}\"; filename=\"{path.name}\"\r\n"
+                     "Content-Type: application/octet-stream\r\n\r\n").encode() + path.read_bytes() + b"\r\n"
+        body += f"--{b}--\r\n".encode()
+        req = urllib.request.Request(self.base + url, body, {"Content-Type": f"multipart/form-data; boundary={b}", **self.auth})
         with urllib.request.urlopen(req, timeout=120) as r:
             return json.load(r)
+
+    def post_file(self, path: Path, target: str) -> dict:
+        return self.post("/api/jobs", {"target": target}, [("file", path)])
 
     def delete(self, job: str) -> None:
         urllib.request.urlopen(urllib.request.Request(f"{self.base}/api/jobs/{job}", method="DELETE", headers=self.auth), timeout=30)
@@ -99,6 +108,38 @@ class Api:
         return {"state": "error", "error": "tempo del test scaduto"}
 
 
+def pdf_cases(d: Path) -> list[tuple[str, dict, list[Path]]]:
+    one, scan = d / "s.pdf", d / "scan.pdf"
+    three = d / "tre.pdf"
+    sh(d, "qpdf", "--empty", "--pages", "s.pdf", "s.pdf", "scan.pdf", "--", "tre.pdf")
+    return [("merge", {}, [one, scan]), ("split", {}, [three]), ("split", {"pages": "1-2, 3"}, [three]),
+            ("extract", {"pages": "2-"}, [three]), ("remove", {"pages": "1"}, [three]),
+            ("rotate", {"angle": "90", "pages": "1"}, [three]), ("compress", {"level": "high"}, [three]),
+            ("ocr", {"lang": "ita+eng"}, [scan])]
+
+
+def run_pdf_tools(api: Api, d: Path) -> tuple[int, list]:
+    available = {t["name"] for t in api.get("/api/pdf")["tools"]}
+    ok, failed = 0, []
+    for tool, opts, files in pdf_cases(d):
+        if tool not in available:
+            print(f"--   pdf {tool:8} non disponibile su questo server")
+            continue
+        label = f"pdf {tool:8} {' '.join(f'{k}={v}' for k, v in opts.items())}"
+        try:
+            st = api.wait(api.post(f"/api/pdf/{tool}", opts, [("files", f) for f in files])["id"])
+        except Exception as e:  # noqa: BLE001
+            st = {"state": "error", "error": str(e)}
+        if st["state"] == "done":
+            ok += 1
+            print(f"ok   {label:32} {st['size']:>9} B  {st['out_name']}  {st.get('note', '')}")
+            api.delete(st["id"])
+        else:
+            failed.append(["pdf", tool])
+            print(f"FAIL {label:32} {st.get('error', '')[:300]}")
+    return ok, failed
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--url", default=os.environ.get("CONVERTER_URL", "http://127.0.0.1:8080"))
@@ -110,6 +151,7 @@ def main() -> int:
 
     api = Api(args.url, args.key)
     d = Path(tempfile.mkdtemp(prefix="selftest-"))
+    pdf_failed: list = []
     try:
         make_samples(d)
         formats = api.get("/api/formats")["inputs"]
@@ -137,15 +179,17 @@ def main() -> int:
                     failed.append([f.name[2:], t])
                     print(f"FAIL {f.name:10} -> {t:6} {st.get('error', '')[:300]}")
                 api.delete(job)
+        pdf_ok, pdf_failed = run_pdf_tools(api, d)
+        ok += pdf_ok
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
-    print(f"\n{ok} riuscite, {len(failed)} fallite")
+    print(f"\n{ok} riuscite, {len(failed) + len(pdf_failed)} fallite")
     if args.write_disabled:
         out = Path(os.environ.get("WORK_DIR", "/work")) / "disabled.json"
         out.write_text(json.dumps(failed))
         print(f"Scritto {out}: riavvia il servizio per applicarlo")
-    return 1 if failed else 0
+    return 1 if failed or pdf_failed else 0
 
 
 if __name__ == "__main__":

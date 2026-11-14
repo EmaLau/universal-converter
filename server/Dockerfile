@@ -4,12 +4,18 @@
 # UID/GID dell'utente che esegue il servizio (proprietario di /work): --build-arg UID=... GID=...
 FROM debian:trixie-slim
 
+LABEL org.opencontainers.image.title="Universal Converter" \
+      org.opencontainers.image.description="Self-hosted file converter and PDF tools: ~200 formats, JSON API, Nextcloud app" \
+      org.opencontainers.image.source="https://github.com/EmaLau/universal-converter" \
+      org.opencontainers.image.licenses="AGPL-3.0-only"
+
 ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8 PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 RUN apt-get update && apt-get install -y --no-install-recommends \
       python3 python3-pip python3-fastapi python3-uvicorn python3-img2pdf \
       libreoffice-nogui libreoffice-writer-nogui libreoffice-calc-nogui libreoffice-impress-nogui libreoffice-draw-nogui \
       ffmpeg imagemagick libheif-plugin-libde265 libheif-plugin-x265 libheif-plugin-aomenc libheif-plugin-dav1d \
-      libraw-bin librsvg2-bin poppler-utils ghostscript pandoc calibre \
+      libraw-bin librsvg2-bin poppler-utils ghostscript qpdf pandoc calibre \
+      ocrmypdf tesseract-ocr tesseract-ocr-ita tesseract-ocr-eng tesseract-ocr-osd pngquant unpaper \
       libarchive-tools 7zip xournalpp xvfb xauth \
       fonts-liberation fonts-dejavu-core fonts-crosextra-carlito fonts-crosextra-caladea fonts-noto-core \
       ca-certificates tini \

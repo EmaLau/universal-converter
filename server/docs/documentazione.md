@@ -6,7 +6,7 @@ lang: it
 
 # Panoramica
 
-Universal Converter è un convertitore di file **self-hosted**: lo installi sul tuo computer o sul tuo server e converte documenti, fogli di calcolo, presentazioni, disegni, immagini, audio, video, sottotitoli, ebook, dati, font e archivi. È pensato come un'alternativa privata a servizi come iLovePDF o CloudConvert: i file non escono mai dalla tua rete e vengono cancellati da soli dopo qualche ora.
+Universal Converter è un convertitore di file **self-hosted**: lo installi sul tuo computer o sul tuo server e converte documenti, fogli di calcolo, presentazioni, disegni, immagini, audio, video, sottotitoli, ebook, dati, font e archivi. Ha anche gli strumenti PDF (unire, dividere, estrarre e togliere pagine, ruotare, comprimere, OCR). È pensato come un'alternativa privata a servizi come iLovePDF o CloudConvert: i file non escono mai dalla tua rete e vengono cancellati da soli dopo qualche ora.
 
 Il progetto ha tre parti indipendenti:
 
@@ -20,7 +20,8 @@ Il progetto ha tre parti indipendenti:
 
 - circa **200 estensioni** in ingresso;
 - oltre **3.000 combinazioni** sorgente → destinazione;
-- **15 programmi** di conversione (LibreOffice, FFmpeg, ImageMagick, Pandoc, Calibre, Poppler, Ghostscript, librsvg, LibRaw, img2pdf, pdf2docx, libarchive, 7-Zip, Xournal++, fontTools) più conversioni scritte in Python per i dati;
+- **17 programmi** (LibreOffice, FFmpeg, ImageMagick, Pandoc, Calibre, Poppler, Ghostscript, qpdf, OCRmyPDF con Tesseract, librsvg, LibRaw, img2pdf, pdf2docx, libarchive, 7-Zip, Xournal++, fontTools) più conversioni scritte in Python per i dati;
+- **7 strumenti PDF**: unire, dividere, estrarre pagine, togliere pagine, ruotare, comprimere, OCR;
 - un autotest che prova davvero ogni combinazione dei file di esempio (oltre 300 conversioni).
 
 # Formati supportati
@@ -72,13 +73,16 @@ L'elenco completo e sempre aggiornato delle combinazioni si trova nella pagina w
 Serve Docker con il plugin Compose.
 
 ```bash
-git clone <indirizzo del repository> universal-converter
+git clone https://github.com/EmaLau/universal-converter.git
 cd universal-converter
 cp .env.example .env        # facoltativo
-docker compose up -d --build
+docker compose pull         # immagine pronta da ghcr.io/emalau/universal-converter
+docker compose up -d
 ```
 
 Poi apri <http://localhost:8080>.
+
+L'immagine pronta viene pubblicata da GitHub Actions a ogni release (tag `latest`, `2.1`, `2.1.0`…), dopo che l'autotest è passato al suo interno. È costruita per linux/amd64 e gira con l'utente 1000. Per costruirla da te (ARM64, un altro ID utente con `CONVERTER_UID`/`CONVERTER_GID`, modifiche locali) usa invece `docker compose up -d --build`.
 
 La prima build scarica LibreOffice, FFmpeg, Calibre e gli altri programmi: circa 500 MB da scaricare e un'immagine finale di circa 3,5 GB. A seconda della connessione richiede 5-20 minuti. Le build successive sono molto più veloci: i programmi stanno in un livello separato dell'immagine e restano in cache, e se cambi solo il codice la build richiede pochi secondi.
 
@@ -111,7 +115,7 @@ Senza i programmi di conversione installati sul computer, la pagina e l'API funz
 
 ## Architetture
 
-L'immagine si basa su Debian 13 (trixie) e funziona sia su x86-64 (PC, NAS, server) sia su ARM64 (Mac con Apple Silicon, Raspberry Pi 4/5).
+L'immagine si basa su Debian 13 (trixie) e funziona sia su x86-64 (PC, NAS, server) sia su ARM64 (Mac con Apple Silicon, Raspberry Pi 4/5). L'immagine pronta su ghcr.io è solo x86-64: su ARM64 costruiscila con `docker compose up -d --build`.
 
 # Configurazione
 
@@ -171,6 +175,22 @@ Note:
 - I risultati restano scaricabili per `RETAIN_HOURS` ore, poi vengono cancellati.
 - La pagina segue il tema chiaro o scuro del sistema operativo.
 
+## Strumenti PDF
+
+Il filtro **PDF** mostra gli strumenti per i PDF. Funzionano come le conversioni (trascini i file, premi il pulsante, scarichi), ma al posto del formato di arrivo hanno delle opzioni:
+
+| Strumento | Cosa fa | Opzioni |
+|---|---|---|
+| **Unisci PDF** | Più PDF in uno solo, nell'ordine mostrato: le frecce lo cambiano | — |
+| **Dividi PDF** | Un PDF per pagina, oppure uno per intervallo; il risultato è uno ZIP | Intervalli, es. `1-3, 4-6, 7-` (vuoto = un file per pagina) |
+| **Estrai pagine** | Un nuovo PDF con solo le pagine scelte | Pagine, es. `1-3, 5, 8-` |
+| **Togli pagine** | Lo stesso PDF senza le pagine scelte | Pagine |
+| **Ruota PDF** | Ruota tutte le pagine o solo alcune | 90° in senso orario, 180°, 90° in senso antiorario; pagine (vuoto = tutte) |
+| **Comprimi PDF** | Ricomprime le immagini con Ghostscript. Se il risultato non è più piccolo, ricevi l'originale | Bassa (qualità di stampa), media, alta (file più piccolo) |
+| **OCR PDF** | Aggiunge il testo riconosciuto sotto le immagini delle pagine (OCRmyPDF + Tesseract): le scansioni diventano ricercabili e copiabili | Lingue (di base `ita+eng`); rifare l'OCR sulle pagine che hanno già testo |
+
+Intervalli di pagine: `5` è una pagina, `1-3` un intervallo, `8-` dalla pagina 8 alla fine, separati da virgole. Con più file, tutti gli strumenti tranne Unisci lavorano su ogni file con le stesse opzioni.
+
 # API
 
 L'API usa JSON ed è la stessa usata dalla pagina web e dall'app Nextcloud. La documentazione interattiva, dove si possono provare le chiamate, è in `/apidocs`.
@@ -183,8 +203,8 @@ Le chiavi si creano nella pagina `/admin`, sul modello di Gokapi. Per attivarla 
 
   | Permesso | Chiamate |
   |---|---|
-  | `formats` | `GET /api/formats`, `GET /api/plan/{src}/{dst}` |
-  | `convert` | `POST /api/jobs` |
+  | `formats` | `GET /api/formats`, `GET /api/plan/{src}/{dst}`, `GET /api/pdf` |
+  | `convert` | `POST /api/jobs`, `POST /api/pdf/{tool}` |
   | `jobs` | `GET /api/jobs/{id}`, `GET /api/jobs/{id}/download`, `DELETE /api/jobs/{id}` |
 
   Un client completo, come l'app Nextcloud o Plico, ha bisogno di tutti e tre.
@@ -207,6 +227,8 @@ curl -H "apikey: uconv_..." -F file=@relazione.docx -F target=pdf http://localho
 | `GET` | `/api/formats` | Formati e combinazioni supportate |
 | `GET` | `/api/plan/{src}/{dst}` | Passaggi previsti per una conversione |
 | `POST` | `/api/jobs` | Crea un lavoro caricando un file |
+| `GET` | `/api/pdf` | Strumenti PDF disponibili e loro opzioni |
+| `POST` | `/api/pdf/{tool}` | Avvia uno strumento PDF su uno o più PDF |
 | `GET` | `/api/jobs/{id}` | Stato di un lavoro |
 | `GET` | `/api/jobs/{id}/download` | Scarica il risultato |
 | `DELETE` | `/api/jobs/{id}` | Cancella subito un lavoro e i suoi file |
@@ -306,6 +328,32 @@ Il nome del risultato è quello del file originale con la nuova estensione: `Rel
 ## `DELETE /api/jobs/{id}`
 
 Cancella subito il lavoro e i suoi file. Se è ancora in corso, lo interrompe. Risponde `{"ok": true}`.
+
+## `GET /api/pdf`
+
+Gli strumenti PDF disponibili con le loro opzioni (nome, tipo, valore predefinito, scelte), nel formato usato dalla pagina web. Uno strumento il cui programma manca (per esempio `ocrmypdf` fuori dal container) non compare.
+
+## `POST /api/pdf/{tool}`
+
+Avvia uno strumento PDF: `merge`, `split`, `extract`, `remove`, `rotate`, `compress` o `ocr`. Richiesta `multipart/form-data` con:
+
+| Campo | Strumenti | Descrizione |
+|---|---|---|
+| `files` | tutti | Un PDF; per `merge` da 2 a 50, ripetendo il campo nell'ordine voluto |
+| `pages` | `split`, `extract`, `remove`, `rotate` | Intervalli di pagine, es. `1-3, 5, 8-`; obbligatorio per `extract` e `remove` |
+| `angle` | `rotate` | `90` (predefinito), `180` o `270`, in senso orario |
+| `level` | `compress` | `low`, `medium` (predefinito) o `high` |
+| `lang` | `ocr` | Lingue di Tesseract unite da `+` (predefinito `ita+eng`); l'immagine contiene `ita`, `eng` e `osd` |
+| `force` | `ocr` | `true` per rifare l'OCR anche sulle pagine che hanno già testo (di base restano intatte) |
+| `meta` | tutti | Testo libero restituito nello stato |
+
+Risponde `201` con lo stato del lavoro, che contiene anche `tool`, `files` e, quando serve, `note` (per esempio "dimensione ridotta del 63%"). Da lì in poi si usano `/api/jobs/{id}` e `/api/jobs/{id}/download` come per le conversioni. Errori: `400` per opzioni sbagliate, file non PDF o numero di file sbagliato, `404` per uno strumento sconosciuto, `413` e `503` come sopra. Le pagine che non esistono (`9-12` in un PDF di 10 pagine) fanno finire il lavoro in `error`.
+
+```bash
+curl -s -F files=@a.pdf -F files=@b.pdf http://localhost:8080/api/pdf/merge
+curl -s -F files=@relazione.pdf -F pages="2-4" http://localhost:8080/api/pdf/extract
+curl -s -F files=@scansione.pdf -F lang=ita+eng http://localhost:8080/api/pdf/ocr
+```
 
 ## Esempio completo con curl
 
@@ -563,9 +611,11 @@ Dopo il riavvio il server ricalcola i percorsi senza quegli archi: se esiste un'
 ## Aggiornare
 
 ```bash
-git pull
-docker compose up -d --build           # solo il codice: pochi secondi
-docker compose build --pull && docker compose up -d   # anche i programmi e gli aggiornamenti di sicurezza di Debian
+docker compose pull && docker compose up -d          # immagine pronta: l'ultima release
+
+git pull                                             # oppure, costruendola da te:
+docker compose up -d --build                         # solo il codice: pochi secondi
+docker compose build --pull && docker compose up -d  # anche i programmi e gli aggiornamenti di sicurezza di Debian
 ```
 
 ## Log
@@ -591,6 +641,7 @@ server/
     jobs.py         Job e JobManager: caricamento, coda, esecuzione dei passaggi, pulizia
     runner.py       run(): esecuzione dei programmi con tempo e dimensione massimi
     tools.py        i convertitori, uno per programma
+    pdftools.py     strumenti PDF (unire, dividere, ruotare, comprimere, OCR...) e loro opzioni
     entrypoint.sh   prepara le cartelle di lavoro e avvia il server
     static/         pagina web (un solo file HTML, senza dipendenze esterne)
   docs/             questa documentazione (diventa /docs durante la build)
@@ -647,9 +698,10 @@ I test non richiedono i programmi di conversione. Coprono:
 - lettura delle impostazioni;
 - scelta dei percorsi e regole sulle combinazioni;
 - conversioni di dati;
-- l'API completa (caricamento, conversione in due passaggi, download, errori, limiti, cancellazione, pulizia), con convertitori finti.
+- l'API completa (caricamento, conversione in due passaggi, download, errori, limiti, cancellazione, pulizia), con convertitori finti;
+- intervalli di pagine, opzioni degli strumenti PDF, API dei PDF e permessi delle chiavi; se sono installati `qpdf`, Poppler, Ghostscript e OCRmyPDF, anche gli strumenti PDF veri (altrimenti quei test vengono saltati).
 
-Per le conversioni vere c'è `selftest.py` dentro il container.
+GitHub Actions lancia i test a ogni push e pull request (`.github/workflows/tests.yml`), con i programmi PDF installati. Per le conversioni vere c'è `selftest.py` dentro il container; il workflow delle release (`.github/workflows/docker.yml`) lo esegue sulla nuova immagine prima di pubblicarla.
 
 # Problemi noti
 
@@ -657,7 +709,7 @@ Per le conversioni vere c'è `selftest.py` dentro il container.
 |---|---|
 | LibreOffice 25.2 entra in un ciclo infinito quando esporta in **TXT** un documento con una **tabella**, e continua a scrivere un file temporaneo (oltre 2,7 GB in due minuti). | DOCX/ODT → TXT passa da Pandoc; gli altri formati di testo passano da DOCX. In più, `MAX_OUTPUT_GB` ferma qualsiasi programma che scriva file enormi. |
 | Raramente LibreOffice resta bloccato all'avvio. | Dopo 10 minuti il processo viene terminato e la conversione ritentata con un profilo pulito. |
-| pdf2docx funziona bene sui PDF "veri" (con testo selezionabile), male sulle scansioni. | Per le scansioni serve prima un OCR, che il convertitore non fa. |
+| pdf2docx funziona bene sui PDF "veri" (con testo selezionabile), male sulle scansioni. | Prima passa la scansione nello strumento **OCR PDF**, poi converti il risultato in Word. |
 | JPEG XL non è supportato dall'ImageMagick di Debian 13. | Il formato non compare tra quelli disponibili. |
 | Video → GIF: solo i primi 60 secondi. | Scelta voluta, per evitare GIF di centinaia di MB. |
 | Il pacchetto `pandoc` di Debian non permette `--sandbox` per DOCX, ODT ed EPUB. | Pandoc gira senza sandbox, ma con `--resource-path` limitato alla cartella del lavoro. |

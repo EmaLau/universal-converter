@@ -8,7 +8,7 @@ lang: en
 
 # Overview
 
-Universal Converter is a **self-hosted** file converter: you install it on your computer or server, and it converts documents, spreadsheets, presentations, drawings, images, audio, video, subtitles, ebooks, data, fonts and archives. It is meant as a private alternative to services such as iLovePDF or CloudConvert: files never leave your network and are deleted automatically after a few hours.
+Universal Converter is a **self-hosted** file converter: you install it on your computer or server, and it converts documents, spreadsheets, presentations, drawings, images, audio, video, subtitles, ebooks, data, fonts and archives. It also has PDF tools (merge, split, extract and remove pages, rotate, compress, OCR). It is meant as a private alternative to services such as iLovePDF or CloudConvert: files never leave your network and are deleted automatically after a few hours.
 
 The project has three independent parts:
 
@@ -22,7 +22,8 @@ The project has three independent parts:
 
 - about **200 input extensions**;
 - more than **3,000 source → target combinations**;
-- **15 conversion programs** (LibreOffice, FFmpeg, ImageMagick, Pandoc, Calibre, Poppler, Ghostscript, librsvg, LibRaw, img2pdf, pdf2docx, libarchive, 7-Zip, Xournal++, fontTools), plus data conversions written in Python;
+- **17 programs** (LibreOffice, FFmpeg, ImageMagick, Pandoc, Calibre, Poppler, Ghostscript, qpdf, OCRmyPDF with Tesseract, librsvg, LibRaw, img2pdf, pdf2docx, libarchive, 7-Zip, Xournal++, fontTools), plus data conversions written in Python;
+- **7 PDF tools**: merge, split, extract pages, remove pages, rotate, compress, OCR;
 - a self-test that actually runs every combination for its sample files (more than 300 conversions).
 
 # Supported formats
@@ -77,10 +78,13 @@ You need Docker with the Compose plugin.
 git clone https://github.com/EmaLau/universal-converter.git
 cd universal-converter
 cp .env.example .env        # optional
-docker compose up -d --build
+docker compose pull         # ready-made image from ghcr.io/emalau/universal-converter
+docker compose up -d
 ```
 
 Then open <http://localhost:8080>.
+
+The ready-made image is published by GitHub Actions for every release (tags `latest`, `2.1`, `2.1.0`…), after the self-test has passed inside it. It is built for linux/amd64 and runs as user 1000. To build it yourself (ARM64, another user ID with `CONVERTER_UID`/`CONVERTER_GID`, local changes) use `docker compose up -d --build` instead.
 
 The first build downloads LibreOffice, FFmpeg, Calibre and the other programs: about 500 MB to download and a final image of about 3.5 GB. Depending on your connection it takes 5-20 minutes. Later builds are much faster: the programs live in a separate image layer that stays cached, and if you only change the code the build takes a few seconds.
 
@@ -93,9 +97,11 @@ docker compose exec converter python3 /app/selftest.py
 ## With Docker, without Compose
 
 ```bash
-docker build -t universal-converter server/
 docker run -d --name universal-converter -p 127.0.0.1:8080:8080 \
-  -v converter-work:/work universal-converter
+  -v converter-work:/work ghcr.io/emalau/universal-converter:latest
+
+# or, building the image yourself
+docker build -t universal-converter server/
 ```
 
 ## Without Docker (development)
@@ -113,7 +119,7 @@ Without the conversion programs installed on your computer, the page and the API
 
 ## Architectures
 
-The image is based on Debian 13 (trixie) and runs on both x86-64 (PCs, NAS, servers) and ARM64 (Apple Silicon Macs, Raspberry Pi 4/5).
+The image is based on Debian 13 (trixie) and runs on both x86-64 (PCs, NAS, servers) and ARM64 (Apple Silicon Macs, Raspberry Pi 4/5). The ready-made image on ghcr.io is x86-64 only: on ARM64 build it with `docker compose up -d --build`.
 
 # Configuration
 
@@ -173,6 +179,22 @@ Notes:
 - Results can be downloaded for `RETAIN_HOURS` hours, then they are deleted.
 - The page follows the operating system's light or dark theme.
 
+## PDF tools
+
+The **PDF** filter shows the PDF tools. They work like the conversions (drag the files, press the button, download), but take options instead of a target format:
+
+| Tool | What it does | Options |
+|---|---|---|
+| **Unisci PDF** (merge) | Several PDFs in one, in the order shown: the arrows change it | — |
+| **Dividi PDF** (split) | One PDF per page, or one per range; the result is a ZIP | Ranges, e.g. `1-3, 4-6, 7-` (empty = one file per page) |
+| **Estrai pagine** (extract) | A new PDF with only the chosen pages | Pages, e.g. `1-3, 5, 8-` |
+| **Togli pagine** (remove) | The same PDF without the chosen pages | Pages |
+| **Ruota PDF** (rotate) | Rotates all pages, or only some | 90° clockwise, 180°, 90° counter-clockwise; pages (empty = all) |
+| **Comprimi PDF** (compress) | Recompresses images with Ghostscript. If the result is not smaller, you get the original back | Low (print quality), medium, high (smallest file) |
+| **OCR PDF** | Adds the recognised text under the page images (OCRmyPDF + Tesseract): scans become searchable and copyable | Languages (default `ita+eng`); redo OCR on pages that already have text |
+
+Page ranges: `5` is one page, `1-3` a range, `8-` from page 8 to the end, separated by commas. With several files, every tool except merge runs once per file with the same options.
+
 # API
 
 The API uses JSON and is the same one used by the web page and the Nextcloud app. Interactive documentation, where calls can be tried out, is at `/apidocs`.
@@ -185,8 +207,8 @@ Keys are created on the `/admin` page, modelled on Gokapi. To enable it set `CON
 
   | Permission | Calls |
   |---|---|
-  | `formats` | `GET /api/formats`, `GET /api/plan/{src}/{dst}` |
-  | `convert` | `POST /api/jobs` |
+  | `formats` | `GET /api/formats`, `GET /api/plan/{src}/{dst}`, `GET /api/pdf` |
+  | `convert` | `POST /api/jobs`, `POST /api/pdf/{tool}` |
   | `jobs` | `GET /api/jobs/{id}`, `GET /api/jobs/{id}/download`, `DELETE /api/jobs/{id}` |
 
   A full client, such as the Nextcloud app or Plico, needs all three.
@@ -209,6 +231,8 @@ curl -H "apikey: uconv_..." -F file=@report.docx -F target=pdf http://localhost:
 | `GET` | `/api/formats` | Supported formats and combinations |
 | `GET` | `/api/plan/{src}/{dst}` | Planned steps for a conversion |
 | `POST` | `/api/jobs` | Create a job by uploading a file |
+| `GET` | `/api/pdf` | Available PDF tools and their options |
+| `POST` | `/api/pdf/{tool}` | Start a PDF tool on one or more PDFs |
 | `GET` | `/api/jobs/{id}` | Job status |
 | `GET` | `/api/jobs/{id}/download` | Download the result |
 | `DELETE` | `/api/jobs/{id}` | Delete a job and its files immediately |
@@ -308,6 +332,32 @@ The result's name is the original file's name with the new extension: `Final rep
 ## `DELETE /api/jobs/{id}`
 
 Deletes the job and its files immediately. If it is still running, it is stopped. Returns `{"ok": true}`.
+
+## `GET /api/pdf`
+
+The available PDF tools with their options (name, type, default, choices), in the format used by the web page. A tool whose program is missing (for example `ocrmypdf` outside the container) is not listed.
+
+## `POST /api/pdf/{tool}`
+
+Starts a PDF tool: `merge`, `split`, `extract`, `remove`, `rotate`, `compress` or `ocr`. A `multipart/form-data` request with:
+
+| Field | Tools | Description |
+|---|---|---|
+| `files` | all | One PDF; for `merge` from 2 to 50, repeating the field in the desired order |
+| `pages` | `split`, `extract`, `remove`, `rotate` | Page ranges, e.g. `1-3, 5, 8-`; required for `extract` and `remove` |
+| `angle` | `rotate` | `90` (default), `180` or `270`, clockwise |
+| `level` | `compress` | `low`, `medium` (default) or `high` |
+| `lang` | `ocr` | Tesseract languages joined by `+` (default `ita+eng`); the image includes `ita`, `eng` and `osd` |
+| `force` | `ocr` | `true` to redo OCR on pages that already have text (by default they are left untouched) |
+| `meta` | all | Free text returned in the status |
+
+It returns `201` with the job status, which also has `tool`, `files` and, when useful, `note` (for example "size reduced by 63%"). From then on use `/api/jobs/{id}` and `/api/jobs/{id}/download` as for conversions. Errors: `400` for wrong options, non-PDF files or the wrong number of files, `404` for an unknown tool, `413` and `503` as above. Pages that do not exist (`9-12` in a 10-page PDF) make the job end with `error`.
+
+```bash
+curl -s -F files=@a.pdf -F files=@b.pdf http://localhost:8080/api/pdf/merge
+curl -s -F files=@report.pdf -F pages="2-4" http://localhost:8080/api/pdf/extract
+curl -s -F files=@scan.pdf -F lang=ita+eng http://localhost:8080/api/pdf/ocr
+```
 
 ## Complete example with curl
 
@@ -565,9 +615,11 @@ After a restart the server recomputes the paths without those edges: if there is
 ## Updating
 
 ```bash
-git pull
-docker compose up -d --build           # code only: a few seconds
-docker compose build --pull && docker compose up -d   # programs and Debian security updates too
+docker compose pull && docker compose up -d          # ready-made image: the latest release
+
+git pull                                             # or, building it yourself:
+docker compose up -d --build                         # code only: a few seconds
+docker compose build --pull && docker compose up -d  # programs and Debian security updates too
 ```
 
 ## Logs
@@ -593,6 +645,7 @@ server/
     jobs.py         Job and JobManager: upload, queue, running the steps, cleanup
     runner.py       run(): runs programs with timeout and size limit
     tools.py        the converters, one per program
+    pdftools.py     PDF tools (merge, split, rotate, compress, OCR...) and their options
     entrypoint.sh   prepares the working folders and starts the server
     static/         web page (a single HTML file, no external dependencies)
   docs/             this documentation (the Italian file becomes /docs at build time)
@@ -649,9 +702,10 @@ The tests do not need the conversion programs. They cover:
 - reading the settings;
 - path selection and combination rules;
 - data conversions;
-- the complete API (upload, two-step conversion, download, errors, limits, deletion, cleanup), with fake converters.
+- the complete API (upload, two-step conversion, download, errors, limits, deletion, cleanup), with fake converters;
+- page ranges, PDF tool options, the PDF API and API key permissions; when `qpdf`, Poppler, Ghostscript and OCRmyPDF are installed, also the real PDF tools (otherwise those tests are skipped).
 
-For real conversions there is `selftest.py` inside the container.
+GitHub Actions runs the tests on every push and pull request (`.github/workflows/tests.yml`), with the PDF programs installed. For real conversions there is `selftest.py` inside the container; the release workflow (`.github/workflows/docker.yml`) runs it on the new image before publishing it.
 
 # Known issues
 
@@ -659,7 +713,7 @@ For real conversions there is `selftest.py` inside the container.
 |---|---|
 | LibreOffice 25.2 enters an infinite loop when exporting a document with a **table** to **TXT**, and keeps writing a temporary file (more than 2.7 GB in two minutes). | DOCX/ODT → TXT goes through Pandoc; other text formats go through DOCX. On top of that, `MAX_OUTPUT_GB` stops any program that writes huge files. |
 | Rarely, LibreOffice hangs at startup. | After 10 minutes the process is terminated and the conversion retried with a clean profile. |
-| pdf2docx works well on "real" PDFs (with selectable text), poorly on scans. | Scans need OCR first, which the converter does not do. |
+| pdf2docx works well on "real" PDFs (with selectable text), poorly on scans. | Run the **OCR PDF** tool on the scan first, then convert the result to Word. |
 | JPEG XL is not supported by Debian 13's ImageMagick. | The format does not appear among the available ones. |
 | Video → GIF: only the first 60 seconds. | Deliberate choice, to avoid GIFs of hundreds of MB. |
 | Debian's `pandoc` package does not allow `--sandbox` for DOCX, ODT and EPUB. | Pandoc runs without sandbox, but with `--resource-path` limited to the job's folder. |

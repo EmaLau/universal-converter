@@ -1,0 +1,46 @@
+name: Bug report
+description: A conversion or a PDF tool fails, or something does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! English or Italian are both fine. **Do not attach private documents.**
+        Security problems go to the [private reporting](https://github.com/EmaLau/universal-converter/security/advisories/new), not here.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown by `GET /healthz`, e.g. 2.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How do you run it?
+      options:
+        - Ready-made image (ghcr.io)
+        - Image built locally
+        - Without Docker
+    validations:
+      required: true
+  - type: input
+    id: what
+    attributes:
+      label: Conversion or tool
+      description: e.g. "docx → pdf" or "PDF tool: compress, level=high"
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: The error message and what you expected instead
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Output of `docker compose logs converter`, if relevant
+      render: text

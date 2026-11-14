@@ -5,6 +5,8 @@ API (intestazione facoltativa "apikey"; obbligatoria fuori dalla pagina web se l
   GET    /api/formats                 {"inputs": {ext: [target...]}, "categories": {...}, "tools": [...]}
   GET    /api/plan/{src}/{dst}        passaggi previsti per una conversione
   POST   /api/jobs                    multipart: file, target, [meta]  -> 201 + stato del lavoro
+  GET    /api/pdf                     strumenti PDF disponibili e loro opzioni
+  POST   /api/pdf/{tool}              multipart: files (uno o piu'), opzioni, [meta] -> 201 + stato del lavoro
   GET    /api/jobs/{id}               stato: queued | running | done | error
   GET    /api/jobs/{id}/download      risultato
   DELETE /api/jobs/{id}               cancella subito i file del lavoro
@@ -28,7 +30,7 @@ from urllib.parse import urlparse
 from fastapi import Body, FastAPI, File, Form, Request, Security, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
-from . import __version__, apikeys
+from . import __version__, apikeys, pdftools
 from .config import Settings
 from .graph import Graph, default_graph
 from .jobs import JobError, JobManager
@@ -87,9 +89,11 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else "?"
 
 
-def create_app(settings: Settings | None = None, graph: Graph | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, graph: Graph | None = None,
+               pdf_tools: dict[str, pdftools.PdfTool] | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     graph = graph or default_graph(settings.disabled)
+    pdf_tools = pdftools.available_tools() if pdf_tools is None else pdf_tools
     manager = JobManager(settings, graph)
     keys = apikeys.KeyStore(settings.keys_dir, settings.admin_password, settings.require_key, settings.admin_login)
     set_file_size_limit(settings.max_output_bytes)
@@ -182,6 +186,28 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None) -> 
     async def create_job(file: UploadFile = File(...), target: str = Form(...), meta: str = Form("")):
         """Crea un lavoro caricando un file e indicando il formato di destinazione. Permesso: `convert`."""
         job = await manager.create(file, file.filename, target, meta)
+        return manager.public(job)
+
+    @app.get("/api/pdf", **api)
+    async def pdf_list():
+        """Strumenti PDF disponibili (unire, dividere, ruotare, comprimere, OCR...) e loro opzioni. Permesso: `formats`."""
+        return {"tools": [t.public() for t in pdf_tools.values()], "max_upload_bytes": settings.max_upload_bytes}
+
+    @app.post("/api/pdf/{tool}", status_code=201, **api)
+    async def pdf_job(tool: str, files: list[UploadFile] = File(...), pages: str = Form(""), angle: str = Form(""),
+                      level: str = Form(""), lang: str = Form(""), force: str = Form(""), meta: str = Form("")):
+        """Avvia uno strumento PDF. Si caricano uno o piu' PDF nel campo `files` (per *merge* nell'ordine voluto)
+        e le opzioni dello strumento: `pages` (es. `1-3, 5, 8-`), `angle` (90, 180, 270), `level` (low, medium,
+        high), `lang` (lingue di Tesseract, es. `ita+eng`), `force` (true per rifare l'OCR).
+        Lo stato e il risultato si leggono con `/api/jobs/{id}`. Permesso: `convert`."""
+        t = pdf_tools.get(tool)
+        if not t:
+            raise JobError(404, f"Strumento PDF sconosciuto: {tool}")
+        try:
+            opts = t.parse({"pages": pages, "angle": angle, "level": level, "lang": lang, "force": force})
+        except pdftools.OptionError as e:
+            raise JobError(400, str(e)) from None
+        job = await manager.create_tool([(f, f.filename) for f in files], t, opts, meta)
         return manager.public(job)
 
     @app.get("/api/jobs/{job_id}", **api)

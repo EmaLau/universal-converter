@@ -29,7 +29,7 @@ from .jobs import JobError
 # permesso -> descrizione mostrata nella pagina admin
 PERMISSIONS = {
     "formats": "Formati e piani di conversione",
-    "convert": "Avviare conversioni",
+    "convert": "Avviare conversioni e strumenti PDF",
     "jobs": "Stato, download e cancellazione dei lavori",
 }
 
@@ -46,9 +46,9 @@ header_scheme = APIKeyHeader(name="apikey", auto_error=False,
 
 def permission_for(method: str, path: str) -> str | None:
     """Permesso richiesto da una chiamata all'API, oppure None se la chiamata non ne richiede."""
-    if path in ("/api/formats",) or path.startswith("/api/plan/"):
+    if path in ("/api/formats", "/api/pdf") or path.startswith("/api/plan/"):
         return "formats" if method == "GET" else None
-    if path == "/api/jobs":
+    if path == "/api/jobs" or re.fullmatch(r"/api/pdf/[^/]+", path):
         return "convert" if method == "POST" else None
     if re.fullmatch(r"/api/jobs/[^/]+(/download)?", path):
         return "jobs"

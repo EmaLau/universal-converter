@@ -1,4 +1,4 @@
-# Avvio: docker compose up -d   ->   http://localhost:8080
+# Avvio: docker compose pull && docker compose up -d   ->   http://localhost:8080
 # Le impostazioni si cambiano in .env (vedi .env.example).
 services:
   converter:
@@ -7,7 +7,9 @@ services:
       args:
         UID: ${CONVERTER_UID:-1000}
         GID: ${CONVERTER_GID:-1000}
-    image: universal-converter:latest
+    # immagine pronta: docker compose pull && docker compose up -d
+    # oppure costruita qui: docker compose up -d --build
+    image: ghcr.io/emalau/universal-converter:latest
     container_name: universal-converter
     restart: unless-stopped
     ports:
