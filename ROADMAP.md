@@ -4,9 +4,9 @@ Where Universal Converter is going. Released changes are in [CHANGELOG.md](CHANG
 
 **Current version:** 2.1.0 (November 2026): ~200 formats, PDF tools with OCR, API keys, ready-made Docker image, Nextcloud app.
 
-## 2.2 — Nextcloud App Store and an English interface
+## 2.2 — an English interface
 
-- [ ] **Nextcloud App Store**: publish the app (`universal_converter`) once the signing certificate is issued ([request](https://github.com/nextcloud/app-certificate-requests/pull/1460)); signed release archives with `scripts/nextcloud-release.sh`.
+- [x] **Nextcloud App Store**: app `universal_converter` 1.1.0 published on [apps.nextcloud.com](https://apps.nextcloud.com/apps/universal_converter) (November 2026), with a signed release archive built by `scripts/nextcloud-release.sh`.
 - [ ] **Screenshots** of the web page, the PDF tools and the Nextcloud menu, in the README and on the App Store.
 - [ ] **English web interface**: the pages are Italian-only today. Move their texts to a small dictionary (`it`, `en`) chosen from the browser language, with a switch in the header.
 - [ ] **English error messages** from the API, chosen with `Accept-Language` (Italian stays the default for compatibility).
