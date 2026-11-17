@@ -24,8 +24,8 @@ if [ -n "${NC_CONTAINER:-}" ] && [ -f "$CRT" ]; then
   # firma del codice: occ integrity:sign-app scrive appinfo/signature.json (la chiave resta nel container il meno possibile)
   docker cp "$STAGE/universal_converter" "$NC_CONTAINER:/tmp/universal_converter-sign"
   docker cp "$KEY" "$NC_CONTAINER:/tmp/universal_converter-sign.key"; docker cp "$CRT" "$NC_CONTAINER:/tmp/universal_converter-sign.crt"
-  docker exec -u 0 "$NC_CONTAINER" chown -R 33:33 /tmp/universal_converter-sign /tmp/universal_converter-sign.key /tmp/universal_converter-sign.crt
-  docker exec -u 33 "$NC_CONTAINER" php /var/www/html/occ integrity:sign-app --path=/tmp/universal_converter-sign \
+  docker exec -u 0 "$NC_CONTAINER" chown -R www-data:www-data /tmp/universal_converter-sign /tmp/universal_converter-sign.key /tmp/universal_converter-sign.crt
+  docker exec -u www-data "$NC_CONTAINER" php /var/www/html/occ integrity:sign-app --path=/tmp/universal_converter-sign \
     --privateKey=/tmp/universal_converter-sign.key --certificate=/tmp/universal_converter-sign.crt || true
   docker cp "$NC_CONTAINER:/tmp/universal_converter-sign/appinfo/signature.json" "$STAGE/universal_converter/appinfo/signature.json"
   docker exec -u 0 "$NC_CONTAINER" rm -rf /tmp/universal_converter-sign /tmp/universal_converter-sign.key /tmp/universal_converter-sign.crt
