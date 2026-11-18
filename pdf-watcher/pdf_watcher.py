@@ -16,6 +16,8 @@ la riga di comando ha la precedenza.
 import argparse
 import fcntl
 import fnmatch
+import gzip
+import html
 import json
 import os
 import re
@@ -143,18 +145,61 @@ class Run:
                         continue
                     yield files, Path(root) / name
 
+    @staticmethod
+    def relink_background(files, src, tmp):
+        """Se lo sfondo PDF di un .xopp punta a un percorso di un altro computer (es. "D:\\..." o "/home/..."),
+        lo cerca accanto al .xopp: stesso nome del PDF originale, oppure stesso nome del .xopp.
+        Scrive la copia corretta in tmp e ritorna il percorso da usare nel container (o None se non serve)."""
+        raw = src.read_bytes()
+        packed = raw[:2] == b"\x1f\x8b"
+        try:
+            text = (gzip.decompress(raw) if packed else raw).decode("utf-8")
+        except (OSError, UnicodeDecodeError, EOFError):
+            return None
+        changed = False
+
+        def fix(m):
+            nonlocal changed
+            tag = m.group(0)
+            if 'domain="absolute"' not in tag:
+                return tag
+            f = re.search(r'filename="([^"]*)"', tag)
+            if not f:
+                return tag
+            old = html.unescape(f.group(1))
+            if old.startswith("/in/") and (files / old[4:]).is_file():
+                return tag
+            for name in (re.split(r"[\\/]", old)[-1], src.stem + ".pdf"):
+                if name and (src.parent / name).is_file():
+                    inside = "/in/" + str((src.parent / name).relative_to(files))
+                    changed = True
+                    return tag[:f.start(1)] + html.escape(inside, quote=True) + tag[f.end(1):]
+            return tag
+
+        text = re.sub(r"<background\b[^>]*>", fix, text)
+        if not changed:
+            return None
+        out = tmp / "relinked.xopp"
+        data = text.encode("utf-8")
+        out.write_bytes(gzip.compress(data) if packed else data)
+        os.chmod(out, 0o644)
+        return "/out/relinked.xopp"
+
     def convert(self, files, src):
         """Ritorna (percorso del PDF nella cartella temporanea, dir temporanea) oppure solleva RuntimeError."""
         kind = "xopp" if src.suffix.lower() == ".xopp" else "office"
         tmp = Path(tempfile.mkdtemp(prefix="run-", dir=self.base / "tmp"))
         os.chown(tmp, self.uid, self.uid)
+        inner_src = str(src.relative_to(files))
+        if kind == "xopp":
+            inner_src = self.relink_background(files, src, tmp) or inner_src
         name = f"pdf-watcher-{os.getpid()}"
         cmd = [DOCKER, "run", "--rm", "--name", name, "--network", "none", "--user", f"{self.uid}:{self.uid}",
                "--read-only", "--tmpfs", "/tmp:size=2g", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
                "--memory", "4g", "--cpus", "4", "--pids-limit", "512",
                "-e", "HOME=/tmp", "-e", f"LIMIT={CONVERT_TIMEOUT}",
                "--mount", f"type=bind,src={files},dst=/in,readonly", "--mount", f"type=bind,src={tmp},dst=/out",
-               self.image, "bash", "-c", INNER, "inner", kind, str(src.relative_to(files))]
+               self.image, "bash", "-c", INNER, "inner", kind, inner_src]
         try:
             try:
                 r = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=CONVERT_TIMEOUT + 60)
