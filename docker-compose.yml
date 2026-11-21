@@ -32,6 +32,10 @@ services:
       PREVIEWS: ${PREVIEWS:-true}
       URL_IMPORT: ${URL_IMPORT:-true}
       URL_ALLOW_PRIVATE: ${URL_ALLOW_PRIVATE:-false}
+      # trascrizione facoltativa con un servizio Whisper compatibile con OpenAI (vedi la documentazione)
+      WHISPER_URL: ${WHISPER_URL:-}
+      WHISPER_MODEL: ${WHISPER_MODEL:-Systran/faster-whisper-small}
+      WHISPER_API_KEY: ${WHISPER_API_KEY:-}
     volumes:
       - converter-work:/work
     deploy:

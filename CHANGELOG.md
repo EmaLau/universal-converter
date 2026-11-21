@@ -5,6 +5,39 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-11-21
+
+### Added
+- **PDF → PowerPoint** (`pdf` → `pptx`, and from there ODP and PPT): LibreOffice imports every page as a slide, with
+  the text boxes in place and editable. Only from an original PDF, like PDF → Word. New *PDF to PowerPoint* tool
+  on the start page.
+- **Layout option** (`layout`) for PDF → Word and PDF → PowerPoint: *editable* (default, as before) or
+  *identical to the original* (`exact`), where every page becomes a 150 DPI image on a page or slide of the same size.
+  New built-in preset *Word identical to the PDF*.
+- PDF → Word **recognises slides** (created by PowerPoint, Keynote, Impress, Beamer… or with 4:3, 16:9, 16:10
+  pages) and says in the result note that PowerPoint or the identical layout work better: pdf2docx rebuilds slides
+  with fixed-size boxes, and a slightly different font makes text spill out, cuts titles and adds pages.
+- **PDF tables to Excel, CSV or JSON** (PyMuPDF): one sheet per table in Excel, tables one after another in CSV,
+  page and rows in JSON; the result note says how many tables were found. New *PDF tables to Excel* tool.
+- **Web page as an article**: `POST /api/fetch` with `article=true` (always used by the web page) turns an HTML page
+  into its main content (readability), with title, source address and the images embedded, so PDF, Word and EPUB
+  finally have the pictures; in Markdown and the other text formats the images keep their original address.
+  Images are downloaded with the same checks as the page (no local network unless `URL_ALLOW_PRIVATE=true`),
+  at most 40, 10 MB each, 60 MB in total. The web page now proposes PDF for web pages.
+- **Transcription** of audio and video to text, SRT or VTT through a separate, optional Whisper service with the
+  OpenAI-compatible API (speaches, whisper.cpp, LocalAI): `WHISPER_URL`, `WHISPER_MODEL`, `WHISPER_API_KEY`;
+  *Spoken language* option (`language`); *Video to subtitles* and *Audio to text* tools. Only the audio
+  (mono, 16 kHz MP3) is sent, and only to that address.
+- **Batch conversion**: an archive (ZIP, 7Z, RAR, TAR…) with a non-archive target converts every file inside and
+  returns a ZIP with the same folders (`<name>-<format>.zip`), copying files already in that format, skipping the
+  others and adding a report when something was skipped or failed. `batch` in `/api/formats`; *Every file to …*
+  in the web page menu for archives.
+- **Folders** on the web page: drag a whole folder or pick one with *A folder*; *Download all* keeps the subfolders
+  (`paths` in `POST /api/jobs/zip`).
+- *Images from a PDF* card that opens Plico's image extraction directly, when `PLICO_URL` is set.
+- `python-pptx` and `readability-lxml` in the image; self-test with real slides in both layouts, PDF tables and a
+  batch conversion. The test workflow installs libarchive and FFmpeg, so batch and transcription tests run there too.
+
 ## [2.4.0] - 2026-11-21
 
 ### Added

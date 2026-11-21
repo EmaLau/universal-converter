@@ -131,6 +131,7 @@ select{background:var(--surface-2);border:1px solid var(--line);border-radius:10
 .urlrow{display:flex;gap:8px;max-width:520px;margin:18px auto 0}
 .urlrow input{flex:1;min-width:0;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
 .drop .hint{font-size:12.5px;margin-top:10px}
+.fdir{color:var(--muted)}
 .presets{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;flex-basis:100%}
 .presets label{flex:0 1 260px!important}
 .presets input[type=text]{min-width:180px}
@@ -177,11 +178,12 @@ select{background:var(--surface-2);border:1px solid var(--line);border-radius:10
     <p class="lead" id="wlead"></p>
     <div class="opts hidden" id="opts"></div>
     <div class="drop" id="drop">
-      <button class="btn" id="pick">Seleziona i file</button>
-      <p>oppure trascinali qui</p>
+      <button class="btn" id="pick">Seleziona i file</button> <button class="btn ghost" id="pickdir" type="button">Una cartella</button>
+      <p>oppure trascinali qui (anche intere cartelle)</p>
       <form class="urlrow" id="urlform"><input type="url" id="url" placeholder="oppure un indirizzo web (https://…)" aria-label="Indirizzo del file" autocomplete="off"><button class="btn small ghost" type="submit">Aggiungi</button></form>
       <p class="hint" id="pastehint">Puoi anche incollare (⌘V / Ctrl+V) un file, un'immagine, un testo o un indirizzo.</p>
       <input type="file" id="input" multiple hidden>
+      <input type="file" id="dirinput" webkitdirectory multiple hidden>
     </div>
     <div class="opts hidden" id="copts" style="margin:18px 0 0"></div>
     <div class="files" id="files"></div>
@@ -203,6 +205,7 @@ const NAMES = {docx:"Word",doc:"Word 97",xlsx:"Excel",xls:"Excel 97",pptx:"Power
 const TOOLS = [
   ["PDF in Word","Rendi modificabile un PDF","pdf","docx"],
   ["Word in PDF","DOC, DOCX, ODT, RTF","doc docx odt rtf pages","pdf"],
+  ["PDF in PowerPoint","Slide modificabili","pdf","pptx"],
   ["Excel in PDF","XLS, XLSX, ODS, CSV","xls xlsx ods csv numbers","pdf"],
   ["PowerPoint in PDF","PPT, PPTX, ODP, Keynote","ppt pptx odp key","pdf"],
   ["Immagini in PDF","JPG, PNG, HEIC, WEBP…","@Immagine","pdf","jpg"],
@@ -222,6 +225,9 @@ const TOOLS = [
   ["Archivio in ZIP","RAR, 7Z, TAR.GZ…","rar 7z tar tar.gz tar.xz tar.bz2","zip"],
   ["Xournal++ in PDF","Appunti .xopp","xopp","pdf"],
   ["PDF in SVG","Pagine vettoriali","pdf","svg"],
+  ["Tabelle PDF in Excel","Ogni tabella in un foglio","pdf","xlsx"],
+  ["Video in sottotitoli","Trascrizione SRT con Whisper","@Video","srt"],
+  ["Audio in testo","Trascrizione con Whisper","@Audio","txt"],
   ["Markdown in PowerPoint","Una slide per titolo","md","pptx"],
   ["JSON in Excel","Anche YAML e TOML","json yaml toml","xlsx"],
   ["Excel in JSON","XLSX, ODS, CSV","xlsx ods xls csv","json"],
@@ -243,7 +249,9 @@ function extOf(name){ const l=name.toLowerCase(); for(const c of ["tar.gz","tar.
 function fmtSize(b){ if(b<1024) return b+" B"; const u=["KB","MB","GB"]; let i=-1; do{b/=1024;i++}while(b>=1024&&i<2); return b.toFixed(b<10?1:0)+" "+u[i]; }
 function el(tag, attrs={}, ...kids){ const n=document.createElement(tag); for(const [k,v] of Object.entries(attrs)){ if(k==="class") n.className=v; else if(k.startsWith("on")) n.addEventListener(k.slice(2),v); else if(v!==false&&v!=null) n.setAttribute(k,v===true?"":v);} for(const k of kids.flat()) n.append(k instanceof Node?k:document.createTextNode(k)); return n; }
 // formati di arrivo di un file; in fondo lo stesso formato, utile con le opzioni (foto piu' piccola, video tagliato)
-function targetsOf(ext){ const t=F.inputs[ext]||[]; return (F.same||[]).includes(ext) ? [...t, ext] : t; }
+function targetsOf(ext){ const t=F.inputs[ext]||[]; const b=F.batch&&(F.batch.archives||[]).includes(ext) ? F.batch.targets : [];
+  return [...t, ...((F.same||[]).includes(ext) ? [ext] : []), ...b]; }
+const isBatch=(ext,t)=>!!F.batch && (F.batch.archives||[]).includes(ext) && (F.batch.targets||[]).includes(t);
 function defaultTarget(ext, targets){ const other=targets.filter(t=>t!==ext);
   return tool && targets.includes(tool[3]) ? tool[3] : (other.includes("pdf")&&cat(ext)!=="Immagine" ? "pdf" : other[0]||targets[0]); }
 function toolSources(t){ return t[2].startsWith("@") ? Object.keys(F.inputs).filter(e=>cat(e)===t[2].slice(1)) : t[2].split(" "); }
@@ -268,6 +276,8 @@ function renderGrid(c){
     el("div",{class:"ic",style:"background:var(--c-pdf);font-size:"+(t.name==="rotate"?"20px":"12px")},PDF_ICON[t.name]||"PDF"),el("b",{},t.title),el("span",{},t.description))));
   if((c==="Tutti"||c==="PDF") && plicoUrl()) g.append(el("a",{class:"tool plico",href:plicoUrl(),target:"_blank",rel:"noopener"},
     el("div",{class:"ic"},"+27"),el("b",{},"Altri strumenti PDF in Plico"),el("span",{},"Firma, oscura, proteggi, filigrana, PDF/A, confronta e altro")));
+  if((c==="Tutti"||c==="PDF") && plicoUrl()) g.append(el("a",{class:"tool plico",href:plicoUrl()+"/#estraiimg",target:"_blank",rel:"noopener"},
+    el("div",{class:"ic"},"IMG"),el("b",{},"Immagini da un PDF"),el("span",{},"Le immagini originali in uno ZIP, in Plico")));
   if(c==="PDF") return;
   TOOLS.forEach((t,i)=>{ const src=toolSources(t); if(!src.some(s=>(F.inputs[s]||[]).includes(t[3]))) return;
     if(c!=="Tutti" && cat(src[0])!==c) return;
@@ -318,8 +328,24 @@ $("#input").onchange = e => { addFiles(e.target.files); e.target.value=""; };
 const drop=$("#drop");
 ["dragenter","dragover"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add("over")}));
 ["dragleave","drop"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove("over")}));
-drop.addEventListener("drop",e=>addFiles(e.dataTransfer.files));
-document.addEventListener("dragover",e=>e.preventDefault()); document.addEventListener("drop",e=>{ e.preventDefault(); if(!$("#work").classList.contains("hidden")) addFiles(e.dataTransfer.files); });
+drop.addEventListener("drop",e=>{ e.stopPropagation(); filesFromDrop(e.dataTransfer).then(addFiles); });
+document.addEventListener("dragover",e=>e.preventDefault()); document.addEventListener("drop",e=>{ e.preventDefault(); if(!$("#work").classList.contains("hidden")) filesFromDrop(e.dataTransfer).then(addFiles); });
+$("#pickdir").onclick = () => $("#dirinput").click();
+$("#dirinput").onchange = e => { addFiles([...e.target.files].filter(f=>!f.name.startsWith("."))); e.target.value=""; };
+// cartelle trascinate: tutti i file, con il percorso (che torna nello ZIP di "Scarica tutti")
+async function filesFromDrop(dt){
+  const entries=[...(dt.items||[])].map(i=>i.webkitGetAsEntry&&i.webkitGetAsEntry()).filter(Boolean);
+  if(!entries.some(x=>x.isDirectory)) return [...dt.files];
+  const out=[];
+  async function walk(entry, dir){
+    if(entry.isFile){ if(entry.name.startsWith(".")) return; const f=await new Promise((res,rej)=>entry.file(res,rej)); f._dir=dir; out.push(f); return; }
+    const sub=dir ? dir+"/"+entry.name : entry.name, reader=entry.createReader(); let batch;
+    do{ batch=await new Promise((res,rej)=>reader.readEntries(res,rej)); for(const x of batch) await walk(x, sub); }while(batch.length);
+  }
+  for(const x of entries) await walk(x, "");
+  return out;
+}
+const dirOf=f=>f._dir || (f.webkitRelativePath||"").split("/").slice(0,-1).join("/");
 
 function addFiles(list){
   for(const f of list){
@@ -327,7 +353,7 @@ function addFiles(list){
     if(ptool){ items.push({id:nextId++, file:f, ext, targets, target:null, state: ext==="pdf" ? (F.max_upload_bytes&&f.size>F.max_upload_bytes ? "error" : "ready") : "unsupported", fatal:!!(F.max_upload_bytes&&f.size>F.max_upload_bytes), error:`file troppo grande (massimo ${fmtSize(F.max_upload_bytes)})`}); continue; }
     if(F.max_upload_bytes && f.size>F.max_upload_bytes){ items.push({id:nextId++, file:f, ext, targets:[], target:null, state:"error", error:`file troppo grande (massimo ${fmtSize(F.max_upload_bytes)})`, fatal:true}); continue; }
     const target = defaultTarget(ext, targets);
-    items.push({id:nextId++, file:f, ext, targets, target, state: targets.length?"ready":"unsupported"});
+    items.push({id:nextId++, file:f, dir:dirOf(f), ext, targets, target, state: targets.length?"ready":"unsupported"});
   }
   renderFiles();
 }
@@ -335,7 +361,7 @@ function renderFiles(){
   const box=$("#files"); box.replaceChildren();
   const visible = items.filter(i=>i.state!=="used"), merge = ptool && ptool.max_files>1;
   for(const it of visible){
-    const opts = it.targets.map(t=>el("option",{value:t,selected:t===it.target},label(t)+(t===it.ext?" (stesso formato)":NAMES[t]&&NAMES[t]!==label(t)?` (${NAMES[t]})`:"")));
+    const opts = it.targets.map(t=>el("option",{value:t,selected:t===it.target},(isBatch(it.ext,t)?"Ogni file in ":"")+label(t)+(t===it.ext?" (stesso formato)":NAMES[t]&&NAMES[t]!==label(t)?` (${NAMES[t]})`:"")));
     const sel = el("select",{disabled:it.state!=="ready", "aria-label":"Formato di arrivo",onchange:e=>{it.target=e.target.value; syncAll();}}, opts);
     let meta, right;
     if(it.state==="unsupported") meta=el("span",{class:"err"},ptool?"Qui servono file PDF":`Formato .${it.ext||"?"} non supportato`);
@@ -365,7 +391,7 @@ function renderFiles(){
     const bar = busy ? el("div",{class:"prog"+(p==null?" ind":"")},el("i",{style:p!=null?`width:${Math.round(p*100)}%`:""})) : "";
     box.append(el("div",{class:"file"},
       el("div",{class:"badge",style:`background:${color(it.ext)}`},(it.ext||"?").slice(0,4)),
-      el("div",{style:"min-width:0"},el("div",{class:"fname",title:it.file.name,translate:"no"},it.file.name),el("div",{class:"fmeta"},meta),bar),
+      el("div",{style:"min-width:0"},el("div",{class:"fname",title:(it.dir?it.dir+"/":"")+it.file.name,translate:"no"},it.dir?el("span",{class:"fdir"},it.dir+"/"):"",it.file.name),el("div",{class:"fmeta"},meta),bar),
       el("div",{class:"actions"},right, busy?"":el("button",{class:"x",title:"Rimuovi","aria-label":"Rimuovi",onclick:()=>{items=items.filter(x=>x!==it);renderFiles();}},"×")),
       it.state==="done"&&it.showPv ? previewBox(it.job, it.preview, it) : ""));
   }
@@ -397,9 +423,10 @@ $("#go").onclick = async () => {
 };
 // tutti i risultati in un unico ZIP: un form, cosi' il browser scarica il file senza tenerlo in memoria
 $("#dlall").onclick = () => {
-  const ids = items.filter(i=>i.state==="done").map(i=>i.job).join(",");
+  const done = items.filter(i=>i.state==="done"), ids = done.map(i=>i.job).join(",");
+  const paths = Object.fromEntries(done.filter(i=>i.dir).map(i=>[i.job, i.dir]));
   const f = el("form",{method:"post",action:"api/jobs/zip",class:"hidden"},
-    el("input",{type:"hidden",name:"ids",value:ids}), el("input",{type:"hidden",name:"lang",value:document.documentElement.lang==="en"?"en":"it"}));
+    el("input",{type:"hidden",name:"ids",value:ids}), el("input",{type:"hidden",name:"paths",value:JSON.stringify(paths)}), el("input",{type:"hidden",name:"lang",value:document.documentElement.lang==="en"?"en":"it"}));
   document.body.append(f); f.submit(); f.remove();
 };
 
@@ -484,7 +511,7 @@ function renderHistory(){
 $("#rclear").onclick=()=>{ saveHistory([]); renderHistory(); };
 
 // ------------------------------------------------------------------ opzioni di conversione e preset
-const ORDER_OPTS=["quality","max_size","start","end","height","video_quality","audio_bitrate","mono","dpi","pages","strip"];
+const ORDER_OPTS=["quality","max_size","start","end","height","video_quality","audio_bitrate","mono","dpi","pages","layout","language","strip"];
 const optCache={}, optVals={};
 let optKey="", optDefs={};
 function optionsFor(src,dst){ const k=src+">"+dst;
@@ -503,6 +530,7 @@ const BUILTIN=[
   {name:"Audio per podcast", target:"mp3", options:{audio_bitrate:"96",mono:true}},
   {name:"Primi 30 secondi in MP3", target:"mp3", options:{end:"0:30"}},
   {name:"Pagine PDF per la stampa", target:"png", options:{dpi:"300"}},
+  {name:"Word identico al PDF", src:"pdf", target:"docx", options:{layout:"exact"}},
 ];
 const PKEY="uc-presets";
 function userPresets(){ try{ const p=JSON.parse(localStorage.getItem(PKEY)||"[]"); return Array.isArray(p)?p:[]; }catch(e){ return []; } }
@@ -511,7 +539,7 @@ let presetSel="", savingPreset=false;
 function applyPreset(pr){
   for(const k of Object.keys(optVals)) delete optVals[k];
   Object.assign(optVals, pr.options||{});
-  if(pr.target) items.forEach(i=>{ if(i.state==="ready" && i.targets.includes(pr.target)) i.target=pr.target; });
+  if(pr.target) items.forEach(i=>{ if(i.state==="ready" && (!pr.src || i.ext===pr.src) && i.targets.includes(pr.target) && !isBatch(i.ext,pr.target)) i.target=pr.target; });
   optKey=""; renderFiles();
 }
 let optBusy=0;
@@ -527,7 +555,8 @@ async function refreshOptions(){
   if(key===optKey) return;  // niente da ridisegnare: non togliamo il cursore da un campo
   optKey=key; box.replaceChildren();
   const all=[...BUILTIN.map((p,i)=>({...p,id:"b"+i})), ...userPresets().map((p,i)=>({...p,id:"u"+i,user:true}))];
-  const usable=all.filter(p=>!p.target || ready.some(i=>i.targets.includes(p.target)));
+  // i preset valgono per conversioni vere, non per quelle in blocco (dove le opzioni non si applicano)
+  const usable=all.filter(p=>!p.target || ready.some(i=>(!p.src || i.ext===p.src) && i.targets.includes(p.target) && !isBatch(i.ext,p.target)));
   const sel=el("select",{"aria-label":"Preset",onchange:e=>{ presetSel=e.target.value; const pr=all.find(p=>p.id===presetSel); if(pr) applyPreset(pr); else optKey=""; refreshOptions(); }},
     el("option",{value:""},"— nessuno —"),
     usable.filter(p=>!p.user).length ? el("optgroup",{label:"Predefiniti"},usable.filter(p=>!p.user).map(p=>el("option",{value:p.id,selected:p.id===presetSel},p.name))) : "",
@@ -567,12 +596,12 @@ async function refreshOptions(){
 function addUrl(u){
   const it={id:nextId++, file:{name:u, size:0}, ext:"", targets:[], target:null, state:"fetching"};
   items.push(it); renderFiles();
-  const fd=new FormData(); fd.append("url",u);
+  const fd=new FormData(); fd.append("url",u); fd.append("article","true");  // pagine web: solo l'articolo, con le immagini
   fetch("api/fetch",{method:"POST",body:fd}).then(async r=>{ const j=await r.json().catch(()=>({}));
     if(r.status!==201){ Object.assign(it,{state:"error",error:j.detail||`HTTP ${r.status}`,fatal:true}); return; }
     const targets=targetsOf(j.ext);
     Object.assign(it,{staged:j.staged, file:{name:j.filename, size:j.size}, ext:j.ext, targets,
-      target: defaultTarget(j.ext, targets),
+      target: j.ext==="html" && targets.includes("pdf") ? "pdf" : defaultTarget(j.ext, targets),
       state: targets.length ? "ready" : "unsupported"});
   }).catch(()=>Object.assign(it,{state:"error",error:"connessione interrotta",fatal:true})).finally(renderFiles);
 }

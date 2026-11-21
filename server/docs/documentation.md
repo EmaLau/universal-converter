@@ -54,7 +54,11 @@ The complete, always up-to-date list of combinations is on the web page, under *
 | From | To | How |
 |---|---|---|
 | Word, ODT, RTF, Pages | PDF | LibreOffice |
-| PDF | Word | pdf2docx (only from an original PDF, not from one just generated) |
+| PDF | Word | pdf2docx (only from an original PDF, not from one just generated); with *Layout: identical* every page becomes an image |
+| PDF | Excel, CSV or JSON | PyMuPDF: the **tables** in the PDF (one sheet per table in Excel); needs a PDF with selectable text |
+| Audio and video | SRT, VTT or text | **Transcription** with a separate, optional Whisper service (`WHISPER_URL`) |
+| ZIP, 7Z, RAR, TAR… | any of the most used formats | **Batch conversion**: every file in the archive to the chosen format, in a ZIP with the same folders |
+| PDF (slides) | PowerPoint | LibreOffice: one slide per page, with editable text boxes in place; with *Layout: identical* every page becomes an image |
 | PDF | JPG or PNG | Poppler, one image per page; with several pages you get a ZIP |
 | PDF | SVG | Poppler, one vector SVG per page |
 | HEIC (iPhone photos) | JPG | ImageMagick |
@@ -144,6 +148,9 @@ Settings go in `.env`, in the project's root folder (start from `.env.example`).
 | `PREVIEWS` | `true` | `false` turns off result previews (`GET /api/jobs/{id}/preview`). |
 | `URL_IMPORT` | `true` | `false` turns off converting a file from a web address (`POST /api/fetch`). |
 | `URL_ALLOW_PRIVATE` | `false` | `true` also allows local network addresses in `POST /api/fetch`: turn it on only if people you do not trust cannot reach the service. |
+| `WHISPER_URL` | *(empty)* | Address of an OpenAI-compatible transcription service (`POST /v1/audio/transcriptions`), e.g. `http://whisper:8000`. When set, audio/video → SRT, VTT and TXT appear (see [Transcription](#transcription-with-whisper)). |
+| `WHISPER_MODEL` | `Systran/faster-whisper-small` | Model requested from the service (`model` field); empty = the service default. |
+| `WHISPER_API_KEY` | *(empty)* | Key for the transcription service, if it needs one (`Authorization: Bearer`). |
 | `CONVERTER_ADMIN_LOGIN` | `true` | Initial value of the *Password to enter this page* switch. |
 | `DATA_DIR` | `/work/data` | Folder holding the API keys and admin settings. |
 | `CONVERTER_CPUS` | `4` | Maximum CPUs for the container. |
@@ -196,17 +203,50 @@ Below the file list the **Options** box shows the options that apply to the chos
 | Video | Start and end (`90`, `1:30`, `0:01:30.5`), maximum resolution, quality (MP4, MOV, MKV, WEBM…), audio bitrate, metadata |
 | Audio | Start and end, bitrate (lossy formats), mono audio, metadata |
 | PDF to JPG or PNG | Resolution (72, 150, 300 DPI) and pages (`2` or `3-5`, `4-` to the end) |
+| PDF to Word or PowerPoint | Layout: *editable* (default) or *identical to the original*, with every page as a 150 DPI image (the text can no longer be edited, but it looks exactly like the PDF) |
 
 With options, the **same format** as output makes sense too: at the end of the menu there is for example *JPG (same format)* to shrink a photo, or *MP4 (same format)* to trim a video or make it lighter.
 
-**Presets** fill in format and options in one click. There are built-in ones (*Photos for the web*, *Photos for email*, *Video for WhatsApp*, *Light video*, *Audio for podcasts*, *First 30 seconds as MP3*, *PDF pages for printing*) and your own: **Save as preset** remembers the current format and options in the browser.
+**Presets** fill in format and options in one click. There are built-in ones (*Photos for the web*, *Photos for email*, *Video for WhatsApp*, *Light video*, *Audio for podcasts*, *First 30 seconds as MP3*, *PDF pages for printing*, *Word identical to the PDF*) and your own: **Save as preset** remembers the current format and options in the browser.
 
 ## Preview, history, addresses and paste
 
 - **Preview**: on finished results the button shows the image, the first page of PDFs and documents, a player for audio and video (formats the browser cannot play become a 30-second clip), the text, or the file list of an archive. `PREVIEWS=false` turns it off.
 - **Recent conversions**: on the start page, the latest conversions made in this browser, as long as the files are kept on the server (`RETAIN_HOURS`). The history lives only in the browser (localStorage).
-- **From an address**: paste an `https://…` address in the field below the button; the server downloads the file, then it is converted like the others (a web page too, which becomes for example Markdown, or a PDF without images). Local network addresses are refused unless `URL_ALLOW_PRIVATE=true`; `URL_IMPORT=false` turns the feature off.
+- **From an address**: paste an `https://…` address in the field below the button; the server downloads the file, then it is converted like the others. A **web page** becomes its main article (title, text and images, without menus, ads and scripts), ready for PDF (offered first), Word, EPUB or Markdown; in Markdown the images keep linking to their original address. Local network addresses are refused, for the page images too, unless `URL_ALLOW_PRIVATE=true`; `URL_IMPORT=false` turns the feature off.
 - **Paste** (⌘V / Ctrl+V) a copied file, an image (a screenshot, for example), some text (it becomes a `.txt` file) or an address.
+
+## Folders and batch conversions
+
+- **Folders**: drag a whole folder onto the page, or pick one with **A folder**. Every file appears in the list with its path, you choose the format (for all of them at once too, with *Convert all to*) and **Download all** returns a ZIP with the same subfolders.
+- **Archives**: for a ZIP (or 7Z, RAR, TAR, TAR.GZ…) the menu also offers *Every file to PDF*, *Every file to JPG* and so on. The server extracts the archive, converts every file that can reach that format, copies those already in it and skips the others; the result is `<name>-<format>.zip` with the same folders. If something was skipped or failed, the ZIP contains `conversion-report.txt`. Hidden files and `__MACOSX` are ignored; at most 2,000 files per archive.
+
+## PDF tables
+
+**PDF → Excel** (or CSV, JSON) looks for tables on every page with PyMuPDF: in Excel every table becomes a sheet (`p3 t1` = page 3, first table), in CSV the tables follow one another separated by an empty row, in JSON there is a list with page and rows. It works well with tables that have rules or borders; scans need the **OCR PDF** tool first. The result note says how many tables were found.
+
+## Transcription with Whisper
+
+Transcribing audio and video to text (`txt`) or subtitles (`srt`, `vtt`) uses a Whisper model, which is heavy (from hundreds of MB to a few GB) and much faster with a GPU: that is why it is not in the converter image but in a **separate, optional service**, reached through the OpenAI-compatible API `POST /v1/audio/transcriptions`. For example [speaches](https://github.com/speaches-ai/speaches) (faster-whisper), the [whisper.cpp](https://github.com/ggml-org/whisper.cpp) server started with `--inference-path /v1/audio/transcriptions`, or LocalAI.
+
+With `WHISPER_URL` set, audio/video → SRT, VTT, TXT conversions appear, along with the *Video to subtitles* and *Audio to text* tools and the **Spoken language** option (empty = detect automatically). FFmpeg extracts the audio (mono, 16 kHz, 48 kbit/s MP3: about 20 MB per hour) and sends it **only** to that address. Example with Docker Compose, next to the converter:
+
+```yaml
+services:
+  converter:
+    environment:
+      WHISPER_URL: http://whisper:8000
+      WHISPER_MODEL: Systran/faster-whisper-small
+  whisper:
+    image: ghcr.io/speaches-ai/speaches:latest-cpu   # or :latest-cuda with an NVIDIA GPU
+    restart: unless-stopped
+    volumes:
+      - whisper-models:/home/ubuntu/.cache/huggingface/hub
+volumes:
+  whisper-models:
+```
+
+The model must be downloaded once in the transcription service; with speaches: `docker compose exec whisper curl -X POST http://localhost:8000/v1/models/Systran/faster-whisper-small` (about 480 MB, kept in the `whisper-models` volume). With the `small` model on a CPU, one minute of speech is transcribed in a few seconds. If the service does not answer, the conversion ends with *Whisper service unreachable*.
 
 ## Installable app
 
@@ -302,9 +342,12 @@ Also used by the Docker healthcheck. It never requires a key. `programs` tells w
   "plico_url": "",
   "previews": true,
   "url_import": true,
-  "same": ["jpg", "png", "mp3", "mp4", "..."]
+  "same": ["jpg", "png", "mp3", "mp4", "..."],
+  "batch": {"archives": ["zip", "7z", "rar", "tar", "tar.gz", "..."], "targets": ["pdf", "docx", "jpg", "mp3", "..."]}
 }
 ```
+
+`batch` tells which archives and target formats batch conversion supports (`POST /api/jobs` with an archive and one of those `target`s).
 
 `inputs` also contains the synonyms (`jpeg`, `yml`…), with the same targets as the main format. Category names are returned in Italian (`Documento` = Document, `Foglio di calcolo` = Spreadsheet, and so on): they are identifiers, translated by the web page.
 
@@ -334,12 +377,14 @@ curl http://localhost:8080/api/options/png/jpg
 | `mono` | audio | `true`: one channel |
 | `dpi` | PDF → JPG/PNG | `72`, `150`, `300` |
 | `pages` | PDF → JPG/PNG | `2`, `3-5`, `4-` |
+| `language` | audio/video → SRT, VTT, TXT (Whisper) | `it`, `en`, `fr`, `de`, `es`, `pt`, `nl`, `pl`, `ro`, `ru`, `uk`, `ar`, `zh`, `ja` (empty = automatic) |
+| `layout` | PDF → DOCX, PDF → PPTX | `exact`: every page as an image, identical to the original (empty = editable) |
 
 Options depend on the program that does the last step; same-format conversions (`jpg` → `jpg`, `mp4` → `mp4`, listed in `same` in `/api/formats`) exist precisely to apply them. Labels are in Italian, like the category names: the web page translates them.
 
 ## `POST /api/fetch`
 
-Field `url`: the server downloads the file (`http`/`https` only, at most 5 redirects, maximum size `MAX_UPLOAD_GB`) and keeps it for one hour. Returns `201`:
+Field `url`: the server downloads the file (`http`/`https` only, at most 5 redirects, maximum size `MAX_UPLOAD_GB`) and keeps it for one hour. With `article=true` an HTML page becomes its main article: title, source address, text and embedded images (at most 40, 10 MB each, 60 MB in total, downloaded with the same checks), without menus, scripts and styles; the file is named after the page title. Returns `201`:
 
 ```json
 {"staged": "9b1f…", "filename": "report.docx", "size": 48213, "ext": "docx", "targets": ["pdf", "odt", "…"]}
@@ -371,6 +416,8 @@ A `multipart/form-data` request with these fields:
 | `meta` | no | Free text (at most 2,000 characters) returned in the job status: useful for integrations. |
 | `callback_url` | no | Webhook: an `http`/`https` address called with `POST` when the job ends (see *Webhooks*). |
 | `options` | no | Conversion options as JSON, e.g. `{"quality": 80, "max_size": 1920}` (see `GET /api/options/{src}/{dst}`). Unknown options, or options that do not apply to the conversion: `400`. |
+
+With an archive (`zip`, `7z`, `rar`, `tar`, `tar.gz`…) and a `target` that is not an archive (one of `batch` in `/api/formats`) the job is a **batch conversion**: the result is a ZIP with every file converted, in the same folders, and the note says how many files were converted, copied, skipped or failed. Options do not apply to batch conversions.
 | `staged` | instead of `file` | Id returned by `POST /api/fetch`: converts the file downloaded from an address. It can be used once. |
 
 Returns `201` with the job status (see below). Errors:
@@ -426,7 +473,7 @@ Preview of the result, of the kind given by the job's `preview` field: `image` (
 
 ## `POST /api/jobs/zip`
 
-Form fields: `ids`, the job ids separated by commas (at most 200), and optionally `lang` (`en` or `it`, for the ZIP name). Returns one ZIP (`converted.zip`, or `convertiti.zip` in Italian) with the results of the finished jobs; jobs that are not ready or no longer exist are skipped, and two results with the same name become `photo.jpg` and `photo (2).jpg`. `404` if none is ready. Permission: `jobs`. The web page uses it for *Download all*.
+Form fields: `ids`, the job ids separated by commas (at most 200), optionally `lang` (`en` or `it`, for the ZIP name) and optionally `paths`, a JSON object `{"<id>": "folder/sub"}` that puts the results in their folders (absolute paths, `..` and hidden folders are removed). Returns one ZIP (`converted.zip`, or `convertiti.zip` in Italian) with the results of the finished jobs; jobs that are not ready or no longer exist are skipped, and two results with the same name become `photo.jpg` and `photo (2).jpg`. `404` if none is ready. Permission: `jobs`. The web page uses it for *Download all*.
 
 ## `DELETE /api/jobs/{id}`
 
@@ -537,7 +584,7 @@ Each edge has a **cost**, 1 by default. Some cost more, so that better alternati
 
 Two special properties:
 
-- **source only** (`source_only`): the edge can only be the first step. PDF → Word with pdf2docx works well on a real PDF, but would make no sense after a DOCX → PDF. The same applies to Markdown → PowerPoint and to WOFF → TTF/OTF.
+- **source only** (`source_only`): the edge can only be the first step. PDF → Word with pdf2docx works well on a real PDF, but would make no sense after a DOCX → PDF. The same applies to PDF → PowerPoint, Markdown → PowerPoint and WOFF → TTF/OTF.
 - **final** (`final_only`): the edge produces several files (the pages of a PDF as images or SVGs), so nothing can come after it.
 
 ## Sensible combinations
@@ -728,7 +775,9 @@ To have a file converted again, delete its entry from `state.json`, or modify th
 - **Security headers.** Pages have a strict Content-Security-Policy, cannot be embedded in other sites (`X-Frame-Options: DENY`), and state-changing requests sent from other sites' pages are rejected (`403`).
 - **Unprivileged user.** The service runs as a regular user inside the container, not as root.
 - **Untrusted files.** Uploaded files are opened by complex programs (LibreOffice, FFmpeg, ImageMagick…), which may have vulnerabilities. Container isolation, the unprivileged user, and the time, size and resource limits reduce the risk. Update the image regularly (`docker compose build --pull`).
-- **Archives.** Extraction uses libarchive, which rejects absolute paths and paths containing `../`.
+- **Archives.** Extraction uses libarchive, which rejects absolute paths and paths containing `../`; batch conversions ignore symbolic links and handle at most 2,000 files.
+- **Web pages.** The images of an article are downloaded with the same checks as `POST /api/fetch` (no local network, connection pinned to the checked IP, count and size limits); the page's scripts, styles and event handlers are removed.
+- **Transcription.** Audio goes only to the service set in `WHISPER_URL`, chosen by the administrator; without that variable nothing leaves the server.
 - **Pandoc.** External resources (images embedded in documents) are looked up only in the job's folder.
 
 # Maintenance
@@ -787,6 +836,10 @@ server/
     jobs.py         Job and JobManager: upload, queue, running the steps, cleanup
     runner.py       run(): runs programs with timeout and size limit
     tools.py        the converters, one per program
+    pageimages.py   PDF -> Word/PowerPoint with pages as images ("identical" layout)
+    pdftables.py    tables in a PDF to CSV, XLSX or JSON (PyMuPDF)
+    webpage.py      web page -> clean article with embedded images
+    transcribe.py   transcription with an OpenAI-compatible Whisper service
     pdftools.py     PDF tools (merge, split, rotate, compress, OCR...) and their options
     entrypoint.sh   prepares the working folders and starts the server
     static/         web page (a single HTML file, no external dependencies)
@@ -856,6 +909,7 @@ GitHub Actions runs the tests on every push and pull request (`.github/workflows
 | LibreOffice 25.2 enters an infinite loop when exporting a document with a **table** to **TXT**, and keeps writing a temporary file (more than 2.7 GB in two minutes). | DOCX/ODT → TXT goes through Pandoc; other text formats go through DOCX. On top of that, `MAX_OUTPUT_GB` stops any program that writes huge files. |
 | Rarely, LibreOffice hangs at startup. | After 10 minutes the process is terminated and the conversion retried with a clean profile. |
 | pdf2docx works well on "real" PDFs (with selectable text), poorly on scans. | Run the **OCR PDF** tool on the scan first, then convert the result to Word. |
+| **Slides** saved as PDF (PowerPoint, Keynote, Beamer…) become Word files with text spilling out of its boxes, cut titles and extra pages: pdf2docx rebuilds each slide with fixed-size boxes, and a slightly wider font is enough to move everything. | The converter recognises slides (the program that created the PDF, 4:3, 16:9 or 16:10 pages) and says so in the result note. To edit them, **PDF → PowerPoint** works better; for a Word file identical to the original there is *Layout: identical*. |
 | JPEG XL is not supported by Debian 13's ImageMagick. | The format does not appear among the available ones. |
 | Video → GIF: only the first 60 seconds. | Deliberate choice, to avoid GIFs of hundreds of MB. |
 | Debian's `pandoc` package does not allow `--sandbox` for DOCX, ODT and EPUB. | Pandoc runs without sandbox, but with `--resource-path` limited to the job's folder. |

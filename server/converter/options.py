@@ -4,6 +4,8 @@ Le opzioni dipendono dal programma che fa l'ultimo passaggio della conversione:
   ImageMagick  qualita' (JPG, WEBP, HEIC, AVIF, JP2), lato lungo massimo, metadati
   FFmpeg       taglio (inizio/fine), risoluzione e qualita' del video, bitrate e canali dell'audio, metadati
   Poppler      PDF in immagini: risoluzione (DPI) e pagine
+  Whisper      lingua del parlato (altrimenti la riconosce da solo)
+  PDF -> Word/PowerPoint  impaginazione: modificabile (predefinita) o identica all'originale (pagine come immagini)
 Si mandano a ``POST /api/jobs`` nel campo ``options`` come JSON, per esempio ``{"quality": 80, "max_size": 1920}``.
 ``GET /api/options/{src}/{dst}`` dice quali opzioni valgono per una conversione.
 """
@@ -50,6 +52,14 @@ DEFS: dict[str, dict] = {
             "choices": [["", "150 DPI (predefinita)"], ["72", "72 DPI (schermo)"], ["300", "300 DPI (stampa)"]]},
     "pages": {"type": "text", "label": "Pagine (es. 2 oppure 3-5)", "placeholder": "tutte"},
     "strip": {"type": "bool", "label": "Togli i metadati (data, posizione GPS, fotocamera)"},
+    "language": {"type": "select", "label": "Lingua del parlato",
+                 "choices": [["", "Riconoscimento automatico"], ["it", "Italiano"], ["en", "Inglese"],
+                             ["fr", "Francese"], ["de", "Tedesco"], ["es", "Spagnolo"], ["pt", "Portoghese"],
+                             ["nl", "Olandese"], ["pl", "Polacco"], ["ro", "Rumeno"], ["ru", "Russo"],
+                             ["uk", "Ucraino"], ["ar", "Arabo"], ["zh", "Cinese"], ["ja", "Giapponese"]]},
+    "layout": {"type": "select", "label": "Impaginazione",
+               "choices": [["", "Modificabile (predefinita)"],
+                           ["exact", "Identica all'originale (pagine come immagini, testo non modificabile)"]]},
 }
 CRF = {"libx264": {"high": "18", "medium": "23", "low": "28"}, "libvpx-vp9": {"high": "26", "medium": "33", "low": "40"}}
 
@@ -76,6 +86,10 @@ def applicable(plan: list[Edge] | None, target: str) -> list[str]:
         return out + ["strip"]
     if last.fn is tools.pdf_to_images and len(plan) == 1:
         return ["dpi", "pages"]
+    if last.fn in (tools.pdf_to_docx, tools.pdf_to_pptx):
+        return ["layout"]
+    if last.tool == "Whisper":
+        return ["language"]
     return []
 
 

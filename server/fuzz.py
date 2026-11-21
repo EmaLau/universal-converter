@@ -54,6 +54,15 @@ def zip_bomb(size_mb: int = 1024) -> bytes:
     return buf.getvalue()
 
 
+def many_files(n: int) -> bytes:
+    """ZIP con tanti file piccolissimi (oltre il limite delle conversioni in blocco)."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for i in range(n):
+            z.writestr(f"f{i}.txt", "x")
+    return buf.getvalue()
+
+
 def pdf_page_loop() -> bytes:
     """PDF il cui albero delle pagine contiene se stesso."""
     objs = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [2 0 R 3 0 R] /Count 2 >>",
@@ -73,7 +82,8 @@ def pdf_huge_page() -> bytes:
         b"[0 0 612 792]", b"[0 0 14400 14400]")
 
 
-def cases() -> list[tuple[str, bytes, str]]:
+def cases() -> list[tuple]:
+    """(nome, contenuto, formato di arrivo[, opzioni])."""
     rnd = os.urandom(256 * 1024)
     good_pdf = pdf_huge_page()
     return [
@@ -95,6 +105,14 @@ def cases() -> list[tuple[str, bytes, str]]:
         ("nested.json", b"[" * 200000 + b"]" * 200000, "yaml"),
         ("nested-csv.json", json.dumps({"a": [[[[[1]]]]] * 1000}).encode(), "csv"),
         ("empty-ish.md", b"\x00" * 10, "pdf"),
+        # 2.5: pagine come immagini, tabelle, slide, conversioni in blocco
+        ("huge-page-exact.pdf", good_pdf, "docx", {"layout": "exact"}),
+        ("page-loop-tables.pdf", pdf_page_loop(), "xlsx"),
+        ("random-tables.pdf", rnd, "csv"),
+        ("page-loop-slides.pdf", pdf_page_loop(), "pptx"),
+        ("zip-bomb-batch.zip", zip_bomb(), "pdf"),
+        ("random-batch.zip", rnd, "pdf"),
+        ("many-files-batch.zip", many_files(2500), "md"),
     ]
 
 
@@ -117,9 +135,10 @@ class Client:
             except ValueError:
                 return e.code, {}
 
-    def submit(self, name: str, body: bytes, target: str):
+    def submit(self, name: str, body: bytes, target: str, opts: dict | None = None):
         b = uuid.uuid4().hex
-        parts = (f'--{b}\r\nContent-Disposition: form-data; name="target"\r\n\r\n{target}\r\n'
+        extra = f'--{b}\r\nContent-Disposition: form-data; name="options"\r\n\r\n{json.dumps(opts)}\r\n' if opts else ""
+        parts = (f'--{b}\r\nContent-Disposition: form-data; name="target"\r\n\r\n{target}\r\n{extra}'
                  f'--{b}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\n'
                  'Content-Type: application/octet-stream\r\n\r\n').encode() + body + f"\r\n--{b}--\r\n".encode()
         return self.req("POST", "/api/jobs", parts, f"multipart/form-data; boundary={b}")
@@ -141,9 +160,9 @@ def main() -> int:
     if not c.healthy():
         print("Il server non risponde su", a.url)
         return 1
-    for name, body, target in cases():
+    for name, body, target, *opts in cases():
         t0 = time.time()
-        code, job = c.submit(name, body, target)
+        code, job = c.submit(name, body, target, opts[0] if opts else None)
         if code != 201:  # rifiutato subito (formato non supportato, conversione disattivata...): va bene
             print(f"ok   {name:22} -> {target:6} rifiutato ({code}): {str(job.get('detail', ''))[:80]}")
         else:

@@ -17,7 +17,7 @@ TERMS = {
     "Lingue": "Languages",
     "Qualità (1-100)": "Quality (1-100)", "Lato lungo massimo (pixel)": "Longest side (pixels)",
     "Inizio (es. 0:30)": "Start (e.g. 0:30)", "Fine (es. 1:45)": "End (e.g. 1:45)",
-    "Pagine (es. 2 oppure 3-5)": "Pages (e.g. 2 or 3-5)",
+    "Pagine (es. 2 oppure 3-5)": "Pages (e.g. 2 or 3-5)", "Impaginazione": "Layout", "Lingua del parlato": "Spoken language",
 }
 
 _EN: list[tuple[str, str]] = [
@@ -105,6 +105,28 @@ _EN: list[tuple[str, str]] = [
     # note sul risultato
     (r"il PDF era gia' compresso: hai ricevuto l'originale", "the PDF was already compressed: you got the original"),
     (r"dimensione ridotta del (\d+)%", r"size reduced by \1%"),
+    (r"nessuna tabella trovata nel PDF \(se è una scansione, prima usa OCR PDF\)",
+     "no tables found in the PDF (if it is a scan, run OCR PDF first)"),
+    (r"1 tabella trovata", "1 table found"),
+    (r"PDF danneggiato o non leggibile", "damaged or unreadable PDF"),
+    (r"nessuna traccia audio da trascrivere", "no audio track to transcribe"),
+    (r"Estrazione dell'archivio", "Extracting the archive"),
+    (r"Creazione dello ZIP", "Creating the ZIP"),
+    (r"troppi file nell'archivio: (\d+) \(al massimo (\d+)\)", r"too many files in the archive: \1 (at most \2)"),
+    (r"nessun file dell'archivio si puo' convertire in \.(\S+)(.*)", r"no file in the archive can be converted to .\1\2"),
+    (r"Conversione in blocco", "Batch conversion"), (r"Convertiti", "Converted"),
+    (r"Copiati \(gia' nel formato\)", "Copied (already in the format)"),
+    (r"Saltati \(formato non convertibile\)", "Skipped (format cannot be converted)"), (r"Non riusciti", "Failed"),
+    (r"convertiti", "converted"), (r"copiati", "copied"), (r"saltati", "skipped"), (r"non riusciti", "failed"),
+    (r"Whisper: trascrizione", "Whisper: transcription"),
+    (r"Whisper non ha riconosciuto parole", "Whisper did not recognise any words"),
+    (r"servizio Whisper non raggiungibile \((.*)\)", r"Whisper service unreachable (\1)"),
+    (r"il servizio Whisper ha risposto (\d+): (.*)", r"the Whisper service answered \1: \2"),
+    (r"(\d+) tabelle trovate", r"\1 tables found"),
+    (r"sembra una presentazione: per modificarla conviene PowerPoint \(PPTX\); per un Word identico all'originale "
+     r"scegli Impaginazione «Identica»",
+     "this looks like a presentation: to edit it, PowerPoint (PPTX) works better; for a Word file identical to the "
+     "original choose Layout “Identical”"),
     # passaggi
     (r"(.+) \(nuovo tentativo\)", r"\1 (retry)"),
     # area admin

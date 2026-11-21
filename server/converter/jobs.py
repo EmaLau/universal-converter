@@ -16,11 +16,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from . import fetch, i18n, options, preview, webhooks
+from . import fetch, i18n, options, preview, webhooks, webpage
 from .config import Settings
 from .formats import ext_of, normalize, safe_filename, stem_of
 from .graph import Graph
-from .runner import ConvError
+from .runner import ConvError, run
 
 if TYPE_CHECKING:
     from .pdftools import PdfTool
@@ -32,6 +32,8 @@ STAGED_HOURS = 1.0  # file scaricati da un indirizzo e non ancora convertiti
 
 class Upload(Protocol):
     async def read(self, size: int = -1) -> bytes: ...
+
+MAX_BATCH_FILES = 2000  # file di un archivio convertiti in blocco
 
 
 class JobError(Exception):
@@ -70,6 +72,7 @@ class Job:
     size_in: int = 0                     # byte caricati
     options: dict = field(default_factory=dict)  # opzioni di conversione (options.py)
     preview: str = ""                    # tipo di anteprima del risultato (preview.py)
+    batch: bool = False                  # archivio: ogni file contenuto convertito in ``target``
     task: asyncio.Task | None = field(default=None, repr=False)
 
     @property
@@ -144,7 +147,8 @@ class JobManager:
         name = safe_filename(filename)
         src, target = ext_of(name), normalize(target)
         plan = self.graph.plan(src, target)
-        if not plan:
+        batch = not plan and self.graph.is_batch(src, target)
+        if not plan and not batch:
             raise JobError(400, f"Non so convertire .{src or '?'} in .{target}")
         try:
             clean = options.parse(opts, plan, target)
@@ -155,7 +159,7 @@ class JobManager:
         budget = None if st else self._check_limits(key_id, limits)
         job_id = uuid.uuid4().hex
         job = Job(id=job_id, dir=self.settings.jobs_dir / job_id, filename=name, src_ext=src, target=target,
-                  meta=meta[:2000], lang=lang, key_id=key_id, callback_url=callback_url, options=clean)
+                  meta=meta[:2000], lang=lang, key_id=key_id, callback_url=callback_url, options=clean, batch=batch)
         job.dir.mkdir(parents=True)
         if st:  # gia' contato nel volume della chiave quando e' stato scaricato
             self.staged.pop(st.id, None)
@@ -177,8 +181,11 @@ class JobManager:
         job.task = asyncio.create_task(self._process(job))
         return job
 
-    async def stage_url(self, url: str, *, key_id: str = "", limits: dict | None = None) -> Staged:
-        """Scarica un file da un indirizzo e lo tiene da parte finche' non si sceglie il formato."""
+    async def stage_url(self, url: str, *, key_id: str = "", limits: dict | None = None,
+                        article: bool = False) -> Staged:
+        """Scarica un file da un indirizzo e lo tiene da parte finche' non si sceglie il formato.
+
+        Con ``article`` una pagina HTML diventa il suo articolo principale, con le immagini incorporate."""
         if not self.settings.url_import:
             raise JobError(404, "Importazione da indirizzo disattivata (URL_IMPORT=false)")
         if len(self.staged) >= self.settings.max_queue:
@@ -203,6 +210,15 @@ class JobManager:
         name = safe_filename(name)
         if mime_ext and not self.graph.targets(ext_of(name)) and self.graph.targets(mime_ext):
             name = f"{stem_of(name)}.{mime_ext}"  # "pagina" o "download.php" -> estensione dal Content-Type
+        if article and ext_of(name) in ("html", "htm"):
+            try:
+                title, page = await asyncio.to_thread(webpage.article, (d / "download").read_bytes(), url,
+                                                      self.settings.url_allow_private)
+            except Exception:  # noqa: BLE001 - pagina che non si riesce a leggere: resta l'HTML originale
+                pass
+            else:
+                (d / "download").write_text(page, encoding="utf-8")
+                name, size = safe_filename(f"{title[:120]}.html"), (d / "download").stat().st_size
         st = Staged(id=sid, path=d / "download", name=name, size=size, key_id=key_id)
         self.staged[sid] = st
         self.bytes_in += size
@@ -342,7 +358,7 @@ class JobManager:
         async with self._sem:
             job.state, job.started = "running", time.time()
             try:
-                await (self._run_tool(job) if job.tool else self._run_steps(job))
+                await (self._run_tool(job) if job.tool else self._run_batch(job) if job.batch else self._run_steps(job))
                 job.state, job.progress, job.step = "done", 1.0, ""
                 if self.settings.previews and job.out_path:
                     job.preview = preview.kind(job.out_path, job.out_name, self.graph)
@@ -368,8 +384,8 @@ class JobManager:
     @staticmethod
     def _clean(job: Job, msg: str) -> str:
         """Toglie dai messaggi d'errore i percorsi interni (/work/jobs/<id>/step1/...): resta il nome del file."""
-        msg = re.sub(re.escape(str(job.dir)) + r"/(step\d+/)?", "", msg)
-        return re.sub(r"(/[\w.-]+)*/jobs/[0-9a-f]{32}/(step\d+/)?", "", msg)
+        msg = re.sub(re.escape(str(job.dir)) + r"/(batch/(in/)?(\d+/)?)?(step\d+/)?", "", msg)
+        return re.sub(r"(/[\w.-]+)*/jobs/[0-9a-f]{32}/(batch/(in/)?(\d+/)?)?(step\d+/)?", "", msg)
 
     def payload(self, job: Job) -> dict:
         """Stato del lavoro per il webhook, nella lingua del lavoro."""
@@ -384,16 +400,24 @@ class JobManager:
         self.webhooks["ok" if job.webhook == "ok" else "error"] += 1
 
     async def _run_steps(self, job: Job) -> None:
-        path = self.graph.plan(job.src_ext, job.target)
+        cur = await self._convert(job, job.input_path, job.src_ext, job.target, job.dir)
+        multi = cur.suffix == ".zip" and job.target != "zip"  # piu' file (es. pagine di un PDF) in uno zip
+        job.out_path = cur
+        job.out_name = f"{stem_of(job.filename)}.{'zip' if multi else job.target}"
+
+    async def _convert(self, job: Job, inp: Path, src: str, target: str, base: Path, prefix: str = "") -> Path:
+        """Esegue i passaggi del percorso src -> target, ognuno in base/stepN; restituisce il file finale."""
+        path = self.graph.plan(src, target)
         if not path:
-            raise ConvError(f"conversione {job.src_ext} -> {job.target} non supportata")
-        cur = job.input_path
+            raise ConvError(f"conversione {src} -> {target} non supportata")
+        cur = inp
         for i, edge in enumerate(path, 1):
-            job.step = f"{edge.tool}: {edge.src.upper()} → {edge.dst.upper()}"
+            job.step = f"{prefix}{edge.tool}: {edge.src.upper()} → {edge.dst.upper()}"
             if len(path) > 1:
                 job.step += f" ({i}/{len(path)})"
-            job.progress = None
-            wd = job.dir / f"step{i}"
+            if not prefix:
+                job.progress = None
+            wd = base / f"step{i}"
             wd.mkdir()
             out = await edge.fn(job, cur, edge.dst, wd)
             if not out.exists() or out.stat().st_size == 0:
@@ -401,9 +425,73 @@ class JobManager:
             if out.suffix != ".zip" or edge.dst == "zip":
                 out = out.rename(wd / f"input.{edge.dst}")  # l'estensione serve al passaggio dopo
             cur = out
-        multi = cur.suffix == ".zip" and job.target != "zip"  # piu' file (es. pagine di un PDF) in uno zip
-        job.out_path = cur
-        job.out_name = f"{stem_of(job.filename)}.{'zip' if multi else job.target}"
+        return cur
+
+    async def _run_batch(self, job: Job) -> None:
+        """Conversione in blocco: estrae l'archivio, converte ogni file che puo' arrivare a ``target`` (gli altri
+        vengono saltati e i file gia' nel formato copiati) e rimette tutto in uno ZIP con le stesse cartelle."""
+        root = job.dir / "batch"
+        tree, out_tree = root / "in", root / "out"
+        tree.mkdir(parents=True)
+        out_tree.mkdir()
+        job.step = "Estrazione dell'archivio"
+        await run(["bsdtar", "-xf", str(job.input_path), "-C", str(tree)], timeout=3600)  # niente ../ e percorsi assoluti
+        files = sorted(p for p in tree.rglob("*") if p.is_file() and not p.is_symlink()
+                       and not any(part.startswith(".") or part == "__MACOSX" for part in p.relative_to(tree).parts))
+        if len(files) > MAX_BATCH_FILES:
+            raise ConvError(f"troppi file nell'archivio: {len(files)} (al massimo {MAX_BATCH_FILES})")
+        converted, copied, skipped, failed = [], [], [], []
+        for n, f in enumerate(files, 1):
+            rel = f.relative_to(tree)
+            src = normalize(ext_of(f.name)) if ext_of(f.name) else ""
+            job.progress = (n - 1) / max(len(files), 1)
+            dest = out_tree / rel.parent / f"{stem_of(f.name)}.{job.target}"
+            if src == job.target:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(f, out_tree / rel)
+                copied.append(str(rel))
+                continue
+            if not src or not self.graph.plan(src, job.target):
+                skipped.append(str(rel))
+                continue
+            work = root / str(n)
+            work.mkdir()
+            inp = work / f"input.{src}"
+            shutil.move(f, inp)
+            try:
+                res = await self._convert(job, inp, src, job.target, work, prefix=f"{n}/{len(files)} · ")
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                if res.suffix == ".zip" and job.target != "zip":  # piu' file (pagine): una cartella col nome del file
+                    folder = dest.with_suffix("")
+                    folder.mkdir(parents=True, exist_ok=True)
+                    await run(["bsdtar", "-xf", str(res), "-C", str(folder)], timeout=3600)
+                else:
+                    shutil.move(res, dest)
+                converted.append(str(rel))
+            except ConvError as e:
+                failed.append(f"{rel}: {self._clean(job, str(e))}")
+            finally:
+                shutil.rmtree(work, ignore_errors=True)
+        if not converted:
+            raise ConvError(f"nessun file dell'archivio si puo' convertire in .{job.target}"
+                            + (f" ({len(failed)} non riusciti: {failed[0]})" if failed else ""))
+        if skipped or failed:
+            report = [i18n.t("Conversione in blocco", job.lang), ""]
+            for title, names in (("Convertiti", converted), ("Copiati (gia' nel formato)", copied),
+                                 ("Saltati (formato non convertibile)", skipped), ("Non riusciti", failed)):
+                if names:
+                    report += [f"{i18n.t(title, job.lang)} ({len(names)}):", *[f"  {x}" for x in names], ""]
+            (out_tree / ("conversion-report.txt" if job.lang == "en" else "resoconto-conversione.txt")).write_text(
+                "\n".join(report), encoding="utf-8")
+        job.step, job.progress = "Creazione dello ZIP", None
+        out = root / "out.zip"
+        await run(["bsdtar", "-a", "-cf", str(out), "-C", str(out_tree), "."], timeout=3600)
+        shutil.rmtree(out_tree, ignore_errors=True)
+        shutil.rmtree(tree, ignore_errors=True)
+        counts = (("convertiti", converted), ("copiati", copied), ("saltati", skipped), ("non riusciti", failed))
+        job.note = ", ".join(f"{len(names)} {i18n.t(word, job.lang)}" for word, names in counts
+                             if names or word == "convertiti")
+        job.out_path, job.out_name = out, f"{stem_of(job.filename)}-{job.target}.zip"
 
     async def _run_tool(self, job: Job) -> None:
         assert job.tool

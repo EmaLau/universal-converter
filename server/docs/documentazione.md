@@ -52,7 +52,11 @@ L'elenco completo e sempre aggiornato delle combinazioni si trova nella pagina w
 | Da | A | Come |
 |---|---|---|
 | Word, ODT, RTF, Pages | PDF | LibreOffice |
-| PDF | Word | pdf2docx (solo da un PDF originale, non da uno appena generato) |
+| PDF | Word | pdf2docx (solo da un PDF originale, non da uno appena generato); con *Impaginazione: identica* ogni pagina diventa un'immagine |
+| PDF | Excel, CSV o JSON | PyMuPDF: le **tabelle** del PDF (in Excel un foglio per tabella); serve un PDF con testo selezionabile |
+| Audio e video | SRT, VTT o testo | **Trascrizione** con un servizio Whisper separato e facoltativo (`WHISPER_URL`) |
+| ZIP, 7Z, RAR, TAR… | qualsiasi formato tra i più usati | **Conversione in blocco**: ogni file dell'archivio nel formato scelto, in uno ZIP con le stesse cartelle |
+| PDF (slide) | PowerPoint | LibreOffice: una slide per pagina, con le caselle di testo modificabili al loro posto; con *Impaginazione: identica* ogni pagina diventa un'immagine |
 | PDF | JPG o PNG | Poppler, un'immagine per pagina; con più pagine si riceve uno ZIP |
 | PDF | SVG | Poppler, un SVG vettoriale per pagina |
 | HEIC (foto iPhone) | JPG | ImageMagick |
@@ -141,6 +145,9 @@ Le impostazioni si scrivono in `.env`, nella cartella principale del progetto (p
 | `PREVIEWS` | `true` | `false` spegne le anteprime dei risultati (`GET /api/jobs/{id}/preview`). |
 | `URL_IMPORT` | `true` | `false` spegne la conversione di un file da un indirizzo web (`POST /api/fetch`). |
 | `URL_ALLOW_PRIVATE` | `false` | `true` permette anche gli indirizzi della rete locale in `POST /api/fetch`: attivalo solo se il servizio non è raggiungibile da persone di cui non ti fidi. |
+| `WHISPER_URL` | *(vuoto)* | Indirizzo di un servizio di trascrizione compatibile con OpenAI (`POST /v1/audio/transcriptions`), es. `http://whisper:8000`. Se è impostato compaiono audio/video → SRT, VTT e TXT (vedi [Trascrizione](#trascrizione-con-whisper)). |
+| `WHISPER_MODEL` | `Systran/faster-whisper-small` | Modello chiesto al servizio (campo `model`); vuoto = quello predefinito del servizio. |
+| `WHISPER_API_KEY` | *(vuoto)* | Chiave per il servizio di trascrizione, se la chiede (`Authorization: Bearer`). |
 | `DATA_DIR` | `/work/data` | Cartella delle chiavi API e delle impostazioni dell'area admin. |
 | `CONVERTER_CPUS` | `4` | CPU massime del container. |
 | `CONVERTER_MEMORY` | `4G` | Memoria massima del container. |
@@ -192,17 +199,50 @@ Sotto la lista dei file compare il riquadro **Opzioni**, con le opzioni che valg
 | Video | Inizio e fine (`90`, `1:30`, `0:01:30.5`), risoluzione massima, qualità (MP4, MOV, MKV, WEBM…), bitrate dell'audio, metadati |
 | Audio | Inizio e fine, bitrate (formati con perdita), audio mono, metadati |
 | PDF in JPG o PNG | Risoluzione (72, 150, 300 DPI) e pagine (`2` oppure `3-5`, `4-` fino alla fine) |
+| PDF in Word o PowerPoint | Impaginazione: *modificabile* (predefinita) oppure *identica all'originale*, con ogni pagina come immagine a 150 DPI (il testo non si modifica più, ma l'aspetto è esattamente quello del PDF) |
 
 Con le opzioni ha senso anche **lo stesso formato** in uscita: in fondo al menu c'è per esempio *JPG (stesso formato)* per rimpicciolire una foto, o *MP4 (stesso formato)* per tagliare o alleggerire un video.
 
-I **preset** riempiono formato e opzioni in un clic. Ci sono quelli predefiniti (*Foto per il web*, *Foto per email*, *Video per WhatsApp*, *Video leggero*, *Audio per podcast*, *Primi 30 secondi in MP3*, *Pagine PDF per la stampa*) e quelli tuoi: **Salva come preset** ricorda formato e opzioni attuali nel browser.
+I **preset** riempiono formato e opzioni in un clic. Ci sono quelli predefiniti (*Foto per il web*, *Foto per email*, *Video per WhatsApp*, *Video leggero*, *Audio per podcast*, *Primi 30 secondi in MP3*, *Pagine PDF per la stampa*, *Word identico al PDF*) e quelli tuoi: **Salva come preset** ricorda formato e opzioni attuali nel browser.
 
 ## Anteprima, cronologia, indirizzi e incolla
 
 - **Anteprima**: sui risultati pronti, il pulsante mostra l'immagine, la prima pagina di PDF e documenti, un lettore per audio e video (i formati che il browser non legge diventano un estratto di 30 secondi), il testo o l'elenco dei file di un archivio. `PREVIEWS=false` la spegne.
 - **Conversioni recenti**: nella pagina iniziale, le ultime conversioni di questo browser, finché i file restano sul server (`RETAIN_HOURS`). La cronologia sta solo nel browser (localStorage).
-- **Da un indirizzo**: nel campo sotto il pulsante si incolla un indirizzo `https://…`; il server scarica il file e poi lo converte come gli altri (anche una pagina web, che diventa per esempio Markdown o PDF senza immagini). Gli indirizzi della rete locale sono rifiutati, salvo `URL_ALLOW_PRIVATE=true`; `URL_IMPORT=false` spegne la funzione.
+- **Da un indirizzo**: nel campo sotto il pulsante si incolla un indirizzo `https://…`; il server scarica il file e poi lo converte come gli altri. Una **pagina web** diventa il suo articolo principale (titolo, testo e immagini, senza menu, pubblicità e script), pronto per PDF (proposto per primo), Word, EPUB o Markdown; nel Markdown le immagini restano collegate all'indirizzo originale. Gli indirizzi della rete locale sono rifiutati, anche per le immagini della pagina, salvo `URL_ALLOW_PRIVATE=true`; `URL_IMPORT=false` spegne la funzione.
 - **Incolla** (⌘V / Ctrl+V) un file copiato, un'immagine (per esempio uno screenshot), un testo (diventa un file `.txt`) o un indirizzo.
+
+## Cartelle e conversioni in blocco
+
+- **Cartelle**: si può trascinare una cartella intera nella pagina, o sceglierla con **Una cartella**. Ogni file compare nella lista con il suo percorso, si sceglie il formato (anche per tutti insieme con *Converti tutti in*) e **Scarica tutti** restituisce uno ZIP con le stesse sottocartelle.
+- **Archivi**: per uno ZIP (o 7Z, RAR, TAR, TAR.GZ…) il menu offre anche *Ogni file in PDF*, *Ogni file in JPG* e così via. Il server estrae l'archivio, converte ogni file che può arrivare a quel formato, copia quelli che ci sono già e salta gli altri; il risultato è `<nome>-<formato>.zip` con le stesse cartelle. Se qualcosa è stato saltato o non è riuscito, nello ZIP c'è `resoconto-conversione.txt`. File nascosti e `__MACOSX` vengono ignorati; al massimo 2.000 file per archivio.
+
+## Tabelle dei PDF
+
+**PDF → Excel** (o CSV, JSON) cerca le tabelle in ogni pagina con PyMuPDF: in Excel ogni tabella diventa un foglio (`p3 t1` = pagina 3, prima tabella), nel CSV le tabelle sono una dopo l'altra separate da una riga vuota, nel JSON c'è un elenco con pagina e righe. Funziona bene con le tabelle che hanno righe o bordi; sulle scansioni prima serve lo strumento **OCR PDF**. La nota del risultato dice quante tabelle ha trovato.
+
+## Trascrizione con Whisper
+
+La trascrizione di audio e video in testo (`txt`) o sottotitoli (`srt`, `vtt`) usa un modello Whisper, che è pesante (da centinaia di MB a qualche GB) e va molto più veloce con una GPU: per questo non è nell'immagine del convertitore ma in un **servizio separato e facoltativo**, raggiunto con l'API compatibile con OpenAI `POST /v1/audio/transcriptions`. Vanno bene per esempio [speaches](https://github.com/speaches-ai/speaches) (faster-whisper), il server di [whisper.cpp](https://github.com/ggml-org/whisper.cpp) avviato con `--inference-path /v1/audio/transcriptions`, o LocalAI.
+
+Con `WHISPER_URL` impostato compaiono le conversioni audio/video → SRT, VTT, TXT, gli strumenti *Video in sottotitoli* e *Audio in testo* e l'opzione **Lingua del parlato** (vuota = riconoscimento automatico). FFmpeg estrae l'audio (mono, 16 kHz, MP3 a 48 kbit/s: circa 20 MB per ora) e lo manda **solo** a quell'indirizzo. Esempio con Docker Compose, accanto al convertitore:
+
+```yaml
+services:
+  converter:
+    environment:
+      WHISPER_URL: http://whisper:8000
+      WHISPER_MODEL: Systran/faster-whisper-small
+  whisper:
+    image: ghcr.io/speaches-ai/speaches:latest-cpu   # oppure :latest-cuda con una GPU NVIDIA
+    restart: unless-stopped
+    volumes:
+      - whisper-models:/home/ubuntu/.cache/huggingface/hub
+volumes:
+  whisper-models:
+```
+
+Il modello va scaricato una volta nel servizio di trascrizione; con speaches: `docker compose exec whisper curl -X POST http://localhost:8000/v1/models/Systran/faster-whisper-small` (circa 480 MB, restano nel volume `whisper-models`). Con il modello `small` su CPU un minuto di parlato si trascrive in pochi secondi. Se il servizio non risponde, la conversione finisce con *servizio Whisper non raggiungibile*.
 
 ## App installabile
 
@@ -298,11 +338,12 @@ Usato anche dall'healthcheck di Docker. Non richiede mai la chiave. `programs` d
   "plico_url": "",
   "previews": true,
   "url_import": true,
-  "same": ["jpg", "png", "mp3", "mp4", "..."]
+  "same": ["jpg", "png", "mp3", "mp4", "..."],
+  "batch": {"archives": ["zip", "7z", "rar", "tar", "tar.gz", "..."], "targets": ["pdf", "docx", "jpg", "mp3", "..."]}
 }
 ```
 
-`inputs` contiene anche i sinonimi (`jpeg`, `yml`…), con le stesse destinazioni del formato principale.
+`inputs` contiene anche i sinonimi (`jpeg`, `yml`…), con le stesse destinazioni del formato principale. `batch` dice per quali archivi e verso quali formati si può fare la conversione in blocco (`POST /api/jobs` con un archivio e uno di quei `target`).
 
 ## `GET /api/options/{src}/{dst}`
 
@@ -330,12 +371,14 @@ curl http://localhost:8080/api/options/png/jpg
 | `mono` | audio | `true`: un solo canale |
 | `dpi` | PDF → JPG/PNG | `72`, `150`, `300` |
 | `pages` | PDF → JPG/PNG | `2`, `3-5`, `4-` |
+| `language` | audio/video → SRT, VTT, TXT (Whisper) | `it`, `en`, `fr`, `de`, `es`, `pt`, `nl`, `pl`, `ro`, `ru`, `uk`, `ar`, `zh`, `ja` (vuoto = automatica) |
+| `layout` | PDF → DOCX, PDF → PPTX | `exact`: ogni pagina come immagine, identica all'originale (vuoto = modificabile) |
 
 Le opzioni dipendono dal programma che fa l'ultimo passaggio; le conversioni nello stesso formato (`jpg` → `jpg`, `mp4` → `mp4`, elencate in `same` di `/api/formats`) servono proprio ad applicarle.
 
 ## `POST /api/fetch`
 
-Campo `url`: il server scarica il file (solo `http`/`https`, al massimo 5 redirect, dimensione massima `MAX_UPLOAD_GB`) e lo tiene da parte per un'ora. Risponde `201`:
+Campo `url`: il server scarica il file (solo `http`/`https`, al massimo 5 redirect, dimensione massima `MAX_UPLOAD_GB`) e lo tiene da parte per un'ora. Con `article=true` una pagina HTML diventa il suo articolo principale: titolo, indirizzo d'origine, testo e immagini incorporate (al massimo 40, 10 MB ciascuna, 60 MB in tutto, scaricate con gli stessi controlli), senza menu, script e stili; il nome del file diventa il titolo della pagina. Risponde `201`:
 
 ```json
 {"staged": "9b1f…", "filename": "relazione.docx", "size": 48213, "ext": "docx", "targets": ["pdf", "odt", "…"]}
@@ -367,6 +410,8 @@ Richiesta `multipart/form-data` con i campi:
 | `meta` | no | Testo libero (al massimo 2.000 caratteri) restituito nello stato del lavoro: utile per chi integra il servizio. |
 | `callback_url` | no | Webhook: un indirizzo `http`/`https` chiamato con `POST` quando il lavoro finisce (vedi *Webhook*). |
 | `options` | no | Opzioni di conversione in JSON, es. `{"quality": 80, "max_size": 1920}` (vedi `GET /api/options/{src}/{dst}`). Opzioni sconosciute o che non valgono per la conversione: `400`. |
+
+Con un archivio (`zip`, `7z`, `rar`, `tar`, `tar.gz`…) e un `target` che non è un archivio (tra quelli di `batch` in `/api/formats`) il lavoro è una **conversione in blocco**: il risultato è uno ZIP con ogni file convertito nelle stesse cartelle, e la nota dice quanti file sono stati convertiti, copiati, saltati o non riusciti. Le opzioni non valgono per le conversioni in blocco.
 | `staged` | al posto di `file` | Id restituito da `POST /api/fetch`: converte il file scaricato da un indirizzo. Si usa una volta sola. |
 
 Risposta `201` con lo stato del lavoro (vedi sotto). Errori:
@@ -422,7 +467,7 @@ Anteprima del risultato, del tipo indicato dal campo `preview` dello stato: `ima
 
 ## `POST /api/jobs/zip`
 
-Campi del form: `ids`, gli id dei lavori separati da virgole (al massimo 200), e facoltativo `lang` (`it` o `en`, per il nome dello ZIP). Restituisce un unico ZIP (`convertiti.zip`, o `converted.zip` in inglese) con i risultati dei lavori finiti; quelli non pronti o non più esistenti vengono saltati, e due risultati con lo stesso nome diventano `foto.jpg` e `foto (2).jpg`. `404` se nessuno è pronto. Permesso: `jobs`. La pagina web lo usa per *Scarica tutti*.
+Campi del form: `ids`, gli id dei lavori separati da virgole (al massimo 200), facoltativo `lang` (`it` o `en`, per il nome dello ZIP) e facoltativo `paths`, un oggetto JSON `{"<id>": "cartella/sotto"}` che mette i risultati nelle loro cartelle (percorsi assoluti, `..` e cartelle nascoste vengono tolti). Restituisce un unico ZIP (`convertiti.zip`, o `converted.zip` in inglese) con i risultati dei lavori finiti; quelli non pronti o non più esistenti vengono saltati, e due risultati con lo stesso nome diventano `foto.jpg` e `foto (2).jpg`. `404` se nessuno è pronto. Permesso: `jobs`. La pagina web lo usa per *Scarica tutti*.
 
 ## `DELETE /api/jobs/{id}`
 
@@ -533,7 +578,7 @@ Ogni arco ha un **costo**, 1 di base. Alcuni costano di più per far preferire a
 
 Due proprietà speciali:
 
-- **solo dal file originale** (`source_only`): l'arco si usa solo come primo passaggio. PDF → Word con pdf2docx funziona bene su un PDF vero, ma non avrebbe senso dopo un DOCX → PDF. Lo stesso vale per Markdown → PowerPoint e per WOFF → TTF/OTF.
+- **solo dal file originale** (`source_only`): l'arco si usa solo come primo passaggio. PDF → Word con pdf2docx funziona bene su un PDF vero, ma non avrebbe senso dopo un DOCX → PDF. Lo stesso vale per PDF → PowerPoint, Markdown → PowerPoint e WOFF → TTF/OTF.
 - **finale** (`final_only`): l'arco produce più file (le pagine di un PDF come immagini o SVG), quindi dopo non si può aggiungere altro.
 
 ## Le combinazioni sensate
@@ -724,7 +769,9 @@ Per far riconvertire un file basta cancellare la sua voce da `state.json`, oppur
 - **Intestazioni di sicurezza.** Le pagine hanno una Content-Security-Policy restrittiva, non si possono incorporare in altri siti (`X-Frame-Options: DENY`) e le richieste che modificano qualcosa inviate da pagine di altri siti vengono rifiutate (`403`).
 - **Utente non privilegiato.** Il servizio gira come utente normale dentro il container, non come root.
 - **File non fidati.** I file caricati vengono aperti da programmi complessi (LibreOffice, FFmpeg, ImageMagick…), che possono avere vulnerabilità. L'isolamento del container, l'utente non privilegiato, i limiti di tempo, di dimensione e di risorse riducono i rischi. Aggiorna regolarmente l'immagine (`docker compose build --pull`).
-- **Archivi.** L'estrazione usa libarchive, che rifiuta i percorsi assoluti e quelli con `../`.
+- **Archivi.** L'estrazione usa libarchive, che rifiuta i percorsi assoluti e quelli con `../`; nelle conversioni in blocco i collegamenti simbolici vengono ignorati e i file sono al massimo 2.000.
+- **Pagine web.** Le immagini di un articolo vengono scaricate con gli stessi controlli di `POST /api/fetch` (niente rete locale, connessione all'IP controllato, limiti di numero e dimensione); script, stili e gestori di eventi della pagina vengono tolti.
+- **Trascrizione.** L'audio va solo al servizio indicato in `WHISPER_URL`, scelto dall'amministratore; senza quella variabile non esce nulla.
 - **Pandoc.** Le risorse esterne (immagini incluse nei documenti) vengono cercate solo nella cartella del lavoro.
 
 # Manutenzione
@@ -783,6 +830,10 @@ server/
     jobs.py         Job e JobManager: caricamento, coda, esecuzione dei passaggi, pulizia
     runner.py       run(): esecuzione dei programmi con tempo e dimensione massimi
     tools.py        i convertitori, uno per programma
+    pageimages.py   PDF -> Word/PowerPoint con le pagine come immagini (impaginazione «identica»)
+    pdftables.py    tabelle di un PDF in CSV, XLSX o JSON (PyMuPDF)
+    webpage.py      pagina web -> articolo pulito con le immagini incorporate
+    transcribe.py   trascrizione con un servizio Whisper compatibile con OpenAI
     pdftools.py     strumenti PDF (unire, dividere, ruotare, comprimere, OCR...) e loro opzioni
     entrypoint.sh   prepara le cartelle di lavoro e avvia il server
     static/         pagina web (un solo file HTML, senza dipendenze esterne)
@@ -852,6 +903,7 @@ GitHub Actions lancia i test a ogni push e pull request (`.github/workflows/test
 | LibreOffice 25.2 entra in un ciclo infinito quando esporta in **TXT** un documento con una **tabella**, e continua a scrivere un file temporaneo (oltre 2,7 GB in due minuti). | DOCX/ODT → TXT passa da Pandoc; gli altri formati di testo passano da DOCX. In più, `MAX_OUTPUT_GB` ferma qualsiasi programma che scriva file enormi. |
 | Raramente LibreOffice resta bloccato all'avvio. | Dopo 10 minuti il processo viene terminato e la conversione ritentata con un profilo pulito. |
 | pdf2docx funziona bene sui PDF "veri" (con testo selezionabile), male sulle scansioni. | Prima passa la scansione nello strumento **OCR PDF**, poi converti il risultato in Word. |
+| Le **slide** in PDF (PowerPoint, Keynote, Beamer…) diventano Word con testo che esce dalle caselle, titoli tagliati e pagine in più: pdf2docx ricostruisce ogni slide con caselle di misura fissa, e basta un carattere un po' più largo per spostare tutto. | Il Convertitore riconosce le slide (programma che ha creato il PDF, pagine in 4:3, 16:9 o 16:10) e lo dice nella nota del risultato. Per modificarle conviene **PDF → PowerPoint**; per un Word identico all'originale c'è *Impaginazione: identica*. |
 | JPEG XL non è supportato dall'ImageMagick di Debian 13. | Il formato non compare tra quelli disponibili. |
 | Video → GIF: solo i primi 60 secondi. | Scelta voluta, per evitare GIF di centinaia di MB. |
 | Il pacchetto `pandoc` di Debian non permette `--sandbox` per DOCX, ODT ed EPUB. | Pandoc gira senza sandbox, ma con `--resource-path` limitato alla cartella del lavoro. |

@@ -5,7 +5,8 @@ Dentro il container (dove ci sono gli strumenti per creare i file di prova):
 
 Senza --all prova un campione rappresentativo; con --all ogni coppia sorgente -> destinazione dei campioni.
 Prova anche gli strumenti PDF disponibili (unire, dividere, estrarre, togliere, ruotare, comprimere, OCR),
-alcune conversioni con le opzioni (qualita', dimensione, taglio, pagine) e le anteprime dei risultati.
+alcune conversioni con le opzioni (qualita', dimensione, taglio, pagine, impaginazione delle slide),
+le tabelle di un PDF, una conversione in blocco (ZIP -> ZIP) e le anteprime dei risultati.
 Con --write-disabled salva le conversioni fallite in WORK_DIR/disabled.json: al prossimo avvio il server
 le toglie dai menu. Esce con codice 1 se almeno una conversione fallisce.
 """
@@ -33,6 +34,22 @@ SAMPLE_TARGETS = {
 }
 
 
+def make_table_pdf(path: Path) -> None:
+    """PDF con una tabella a righe e colonne disegnate (per PDF -> CSV/XLSX/JSON)."""
+    import pymupdf
+    rows = [["Nome", "Eta", "Citta"], ["Anna", "30", "Roma"], ["Luca", "25", "Milano"]]
+    with pymupdf.open() as doc:
+        page = doc.new_page()
+        for r in range(len(rows) + 1):
+            page.draw_line((72, 100 + r * 24), (432, 100 + r * 24))
+        for c in range(4):
+            page.draw_line((72 + c * 120, 100), (72 + c * 120, 172))
+        for r, row in enumerate(rows):
+            for c, cell in enumerate(row):
+                page.insert_text((78 + c * 120, 116 + r * 24), cell, fontsize=11)
+        doc.save(path)
+
+
 def sh(d: Path, *cmd: str) -> None:
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=d)
 
@@ -47,7 +64,11 @@ def make_samples(d: Path) -> None:
                              '<rect width="120" height="80" fill="#e5322d"/><circle cx="60" cy="40" r="25" fill="#fff"/></svg>')
     sh(d, "pandoc", "-s", "s.md", "-o", "s.docx")
     sh(d, "pandoc", "-s", "s.md", "-o", "s.epub", "--metadata", "title=Prova")
+    # slide vere (testo selezionabile, pagine 16:9) per PDF -> Word/PowerPoint
+    sh(d, "pandoc", "s.md", "-o", "slide.pptx")
+    sh(d, "soffice", f"-env:UserInstallation={(d / 'lo').as_uri()}", "--headless", "--convert-to", "pdf", "slide.pptx")
     sh(d, "magick", "-size", "320x200", "gradient:red-blue", "s.png")
+    make_table_pdf(d / "tabella.pdf")
     sh(d, "magick", "s.png", "s.jpg")
     sh(d, "magick", "s.png", "s.pdf")
     sh(d, "magick", "s.png", "s.eps")
@@ -70,6 +91,11 @@ def make_samples(d: Path) -> None:
     (d / "dir" / "a.txt").write_text("a")
     sh(d, "bsdtar", "-a", "-cf", "s.zip", "dir")
     sh(d, "bsdtar", "-a", "-cf", "s.tar.gz", "dir")
+    # conversione in blocco: documenti e un'immagine in PDF, l'audio va saltato
+    (d / "lotto").mkdir()
+    for f in ("s.md", "s.txt", "s.png", "s.wav"):
+        shutil.copy(d / f, d / "lotto" / f)
+    sh(d, "bsdtar", "-a", "-cf", "lotto.zip", "lotto")
 
 
 class Api:
@@ -148,6 +174,10 @@ def option_cases(d: Path) -> list[tuple[Path, str, dict]]:
             (d / "s.mp4", "gif", {"end": "1.5", "height": "360"}),
             (d / "s.wav", "mp3", {"end": "2", "audio_bitrate": "64", "mono": True}),
             (d / "tre.pdf", "png", {"pages": "2-3", "dpi": "72"}),
+            (d / "slide.pdf", "docx", {}), (d / "slide.pdf", "docx", {"layout": "exact"}),
+            (d / "slide.pdf", "pptx", {}), (d / "slide.pdf", "pptx", {"layout": "exact"}),
+            (d / "tabella.pdf", "xlsx", {}), (d / "tabella.pdf", "csv", {}),
+            (d / "lotto.zip", "pdf", {}),
             (d / "s.docx", "pdf", {}), (d / "s.md", "html", {}), (d / "s.avi", "avi", {})]
 
 
@@ -170,7 +200,7 @@ def run_options(api: Api, d: Path) -> tuple[int, list]:
             st = {"state": "error", "error": str(e)}
         if st["state"] == "done":
             ok += 1
-            print(f"ok   {label:52} {st['size']:>9} B  {kind}")
+            print(f"ok   {label:52} {st['size']:>9} B  {kind}  {st.get('note', '')}")
             api.delete(st["id"])
         else:
             failed.append([f.name, target])

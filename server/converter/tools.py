@@ -51,11 +51,13 @@ def csv_separator(sample: str, ext: str) -> int:
     return 59 if sample.count(";") > sample.count(",") else 44
 
 
-async def libreoffice(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
+async def libreoffice(job: Job, inp: Path, out_ext: str, wd: Path, infilter: str | None = None) -> Path:
     profile = job.dir / "lo-profile"  # profilo separato per lavoro: piu' istanze in parallelo
     cmd = ["soffice", f"-env:UserInstallation={profile.as_uri()}", "--headless", "--norestore", "--nolockcheck"]
     src = ext_of(inp.name)
-    if src in ("csv", "tsv"):
+    if infilter:
+        cmd.append(f"--infilter={infilter}")
+    elif src in ("csv", "tsv"):
         with inp.open("rb") as fh:
             sample = fh.read(65536).decode("utf-8", "replace")
         cmd.append(f"--infilter=CSV:{csv_separator(sample, src)},34,76,1")
@@ -80,12 +82,78 @@ async def libreoffice(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
 
 
 # ------------------------------------------------------------------------------------------------- PDF
+SLIDE_APPS = re.compile(r"PowerPoint|Keynote|Impress|Google (Slides|Presentazioni)|Beamer|Canva", re.I)
+SLIDE_RATIOS = (4 / 3, 16 / 9, 16 / 10)
+SLIDES_NOTE = ("sembra una presentazione: per modificarla conviene PowerPoint (PPTX); "
+               "per un Word identico all'originale scegli Impaginazione «Identica»")
+
+
+def slides_from_info(info: str) -> bool:
+    """Dall'uscita di pdfinfo: creato da un programma di presentazioni, o pagine orizzontali in 4:3, 16:9, 16:10."""
+    for key in ("Creator", "Producer"):
+        m = re.search(rf"^{key}:\s*(.*)$", info, re.M)
+        if m and SLIDE_APPS.search(m.group(1)):
+            return True
+    m = re.search(r"^Page size:\s*([\d.]+) x ([\d.]+)", info, re.M)
+    if not m or float(m.group(2)) == 0:
+        return False
+    ratio = float(m.group(1)) / float(m.group(2))
+    return any(abs(ratio - r) < 0.03 * r for r in SLIDE_RATIOS)
+
+
+async def looks_like_slides(inp: Path) -> bool:
+    try:
+        return slides_from_info(await run(["pdfinfo", str(inp)], timeout=120))
+    except ConvError:
+        return False
+
+
+async def pdf_pages_as_images(inp: Path, out: Path, kind: str) -> Path:
+    """Impaginazione «Identica»: ogni pagina diventa un'immagine in Word o PowerPoint (vedi pageimages.py)."""
+    script = Path(__file__).with_name("pageimages.py")
+    await run(["python3", str(script), kind, str(inp), str(out)], timeout=1800)
+    return out
+
+
 async def pdf_to_docx(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
     out = wd / "out.docx"
+    if opts_of(job, out_ext).get("layout") == "exact":
+        return await pdf_pages_as_images(inp, out, "docx")
     code = ("import sys,logging;logging.disable(logging.WARNING);from pdf2docx import Converter;"
             "c=Converter(sys.argv[1]);c.convert(sys.argv[2]);c.close()")
     await run(["python3", "-c", code, str(inp), str(out)], timeout=1800)
+    if await looks_like_slides(inp):  # pdf2docx ricostruisce male le slide: suggerisce le alternative
+        job.note = SLIDES_NOTE
     return out
+
+
+NO_TABLES = "nessuna tabella trovata nel PDF (se è una scansione, prima usa OCR PDF)"
+
+
+async def pdf_tables(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
+    """Tabelle di un PDF in CSV, XLSX o JSON (vedi pdftables.py)."""
+    out = wd / f"out.{out_ext}"
+    script = Path(__file__).with_name("pdftables.py")
+    try:
+        msg = await run(["python3", str(script), out_ext, str(inp), str(out)], timeout=1800)
+    except ConvError as e:
+        if "restituito 3" in str(e):
+            raise ConvError(NO_TABLES) from None
+        if "restituito 4" in str(e):
+            raise ConvError("PDF danneggiato o non leggibile") from None
+        raise
+    m = re.search(r"(\d+) tabelle", msg or "")
+    if m:
+        n = int(m.group(1))
+        job.note = "1 tabella trovata" if n == 1 else f"{n} tabelle trovate"
+    return out
+
+
+async def pdf_to_pptx(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
+    """Modificabile: LibreOffice importa ogni pagina come una slide, con le caselle di testo al loro posto."""
+    if opts_of(job, out_ext).get("layout") == "exact":
+        return await pdf_pages_as_images(inp, wd / "out.pptx", "pptx")
+    return await libreoffice(job, inp, out_ext, wd, infilter="impress_pdf_import")
 
 
 async def pdf_to_text(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
@@ -321,10 +389,20 @@ PANDOC_WRITE = {"md": "markdown", "html": "html", "docx": "docx", "odt": "odt", 
                 "pptx": "pptx"}
 
 
+PANDOC_BINARY = {"docx", "odt", "epub", "pptx", "html"}  # qui le immagini restano incorporate
+
+
 async def pandoc(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
     out = wd / f"out.{out_ext}"
     # Niente --sandbox: con il pandoc di Debian blocca anche i suoi modelli (docx/odt/epub).
     # Le risorse (immagini incluse) si cercano solo nella cartella del lavoro.
+    if ext_of(inp.name) == "html" and out_ext not in PANDOC_BINARY:
+        # articoli da una pagina web: nei formati di testo l'indirizzo dell'immagine, non i suoi dati
+        from .webpage import restore_image_urls
+        text = inp.read_text(encoding="utf-8", errors="replace")
+        if "data-orig=" in text:
+            inp = wd / "article.html"
+            inp.write_text(restore_image_urls(text), encoding="utf-8")
     await run(["pandoc", "-s", f"--resource-path={inp.parent}", "-f", PANDOC_READ[ext_of(inp.name)],
                "-t", PANDOC_WRITE[out_ext], "-o", str(out), str(inp)], timeout=600)
     return out

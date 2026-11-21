@@ -33,16 +33,20 @@ class Edge:
     final_only: bool = False   # produce piu' file (zip): niente passaggi dopo
 
 
+TRANSCRIPTS = ("srt", "vtt", "txt")
+
+
 def is_sensible(src: str, dst: str) -> bool:
     """Toglie le combinazioni possibili ma inutili (foglio di calcolo -> MP3, xlsx -> docx...)."""
     a, b = category(src), category(dst)
     closed = ("Sottotitoli", "Font")  # categorie che non si mescolano con le altre
+    spoken = a in ("Audio", "Video") and dst in TRANSCRIPTS  # trascrizione con Whisper (se c'e')
     rules = (
-        (a in closed or b in closed) and a != b,
+        (a in closed or b in closed) and a != b and not spoken,
         a == "Dati" and b not in ("Dati", "Foglio di calcolo"),
-        b == "Dati" and a not in ("Dati", "Foglio di calcolo"),
-        a == "Audio" and b != "Audio",
-        a == "Video" and b not in ("Video", "Audio") and dst != "gif",
+        b == "Dati" and a not in ("Dati", "Foglio di calcolo") and (src, dst) != ("pdf", "json"),  # tabelle del PDF
+        a == "Audio" and b != "Audio" and not spoken,
+        a == "Video" and b not in ("Video", "Audio") and dst != "gif" and not spoken,
         a == "Disegno" and b not in ("Immagine", "Disegno") and dst != "pdf",
         a in ("Foglio di calcolo", "Presentazione") and b == "Ebook",
         src == "xopp" and dst not in ("pdf", "jpg", "png"),
@@ -50,7 +54,7 @@ def is_sensible(src: str, dst: str) -> bool:
         b == "Archivio" and a != "Archivio",
         a == "Foglio di calcolo" and b == "Documento" and dst not in ("pdf", "html", "txt", "md"),
         a == "Foglio di calcolo" and b == "Presentazione",
-        b == "Presentazione" and a == "Documento" and src not in ("md", "rst", "org", "html", "textile"),
+        b == "Presentazione" and a == "Documento" and src not in ("md", "rst", "org", "html", "textile", "pdf"),
         a == "Presentazione" and b == "Documento" and dst != "pdf",
         a == "Immagine" and b != "Immagine" and dst != "pdf" and not (src in ("gif", "apng") and dst in ("mp4", "webm")),
     )
@@ -64,6 +68,7 @@ class Graph:
         self.disabled: set[tuple[str, str]] = set()
         self.plans: dict[str, dict[str, list[Edge]]] = {}
         self.same: dict[str, Edge] = {}  # stesso formato in uscita: ha senso con le opzioni (ridimensionare, tagliare)
+        self.batch: list[str] = []       # formati in cui convertire ogni file di un archivio (conversione in blocco)
 
     def add(self, srcs: str, dsts: str, fn: Converter, tool: str, **kw) -> None:
         """Aggiunge un arco per ogni coppia: add("png jpg", "pdf", ...)."""
@@ -109,6 +114,12 @@ class Graph:
     def rebuild(self) -> None:
         self.plans = {src: {d: p for d, p in self._shortest(src).items() if is_sensible(src, d)}
                       for src in {e.src for e in self.edges}}
+        reachable = {d for p in self.plans.values() for d in p}
+        self.batch = [t for t in BATCH_TARGETS.split() if t in reachable]
+
+    def is_batch(self, src: str, dst: str) -> bool:
+        """Archivio -> formato non d'archivio: si converte ogni file contenuto (ZIP in ingresso, ZIP in uscita)."""
+        return normalize(src) in BATCH_ARCHIVES.split() and normalize(dst) in self.batch
 
     def plan(self, src: str, dst: str) -> list[Edge] | None:
         src, dst = normalize(src), normalize(dst)
@@ -132,7 +143,8 @@ class Graph:
         same = self.same_formats()
         same += [a for a, real in ALIASES.items() if real in same]
         return {"inputs": dict(sorted(inputs.items())), "categories": CATEGORY_OF,
-                "tools": sorted({e.tool for e in self.edges}), "same": same}
+                "tools": sorted({e.tool for e in self.edges}), "same": same,
+                "batch": {"archives": BATCH_ARCHIVES.split() if self.batch else [], "targets": self.batch}}
 
 
 WRITER = "doc docx odt rtf txt pages wpd wps fodt abw sxw lwp hwp"
@@ -153,9 +165,13 @@ MARKUP = "md rst org tex html ipynb textile dbk wiki opml t2t typ"
 MARKUP_OUT = "docx odt html md rst tex txt epub adoc typ dbk wiki org textile texi"
 ARCHIVE = "zip 7z rar tar tar.gz tar.xz tar.bz2 tar.zst iso cab cpio lha"
 ARCHIVE_OUT = "zip 7z tar.gz tar.xz tar.bz2 tar.zst tar"
+# conversione in blocco: ogni file di questi archivi nel formato scelto (tra questi, se qualcosa ci arriva)
+BATCH_ARCHIVES = "zip 7z rar tar tar.gz tar.xz tar.bz2 tar.zst"
+BATCH_TARGETS = ("pdf docx odt txt md html epub jpg png webp avif heic gif tiff mp3 m4a flac wav ogg opus "
+                 "mp4 webm mkv mov csv xlsx json yaml srt vtt")
 
 
-def default_graph(disabled: Iterable[tuple[str, str]] = ()) -> Graph:
+def default_graph(disabled: Iterable[tuple[str, str]] = (), transcriber: Converter | None = None) -> Graph:
     g = Graph()
     # documenti, fogli di calcolo, presentazioni, disegni
     # niente txt da LibreOffice: con le tabelle l'esportazione Text di LO 25.2 entra in un ciclo infinito
@@ -171,6 +187,10 @@ def default_graph(disabled: Iterable[tuple[str, str]] = ()) -> Graph:
     g.add("xopp", "pdf", tools.xournalpp, "Xournal++")
     # PDF e PostScript
     g.add("pdf", "docx", tools.pdf_to_docx, "pdf2docx", source_only=True)
+    # slide modificabili (LibreOffice importa ogni pagina): solo da un PDF originale, come pdf2docx
+    g.add("pdf", "pptx", tools.pdf_to_pptx, "LibreOffice", source_only=True)
+    # tabelle del PDF (PyMuPDF): solo da un PDF originale, che ha il testo
+    g.add("pdf", "csv xlsx json", tools.pdf_tables, "PyMuPDF", source_only=True)
     g.add("pdf", "txt", tools.pdf_to_text, "Poppler")
     g.add("pdf", "html", tools.pdf_to_html, "Poppler", cost=1.2)
     g.add("pdf", "jpg png", tools.pdf_to_images, "Poppler", final_only=True)
@@ -187,6 +207,8 @@ def default_graph(disabled: Iterable[tuple[str, str]] = ()) -> Graph:
     g.add(VIDEO, f"{VIDEO_OUT} gif {AUDIO_OUT}", tools.ffmpeg, "FFmpeg")
     g.add("gif apng", "mp4 webm", tools.ffmpeg, "FFmpeg")
     g.add(SUBTITLES, "srt vtt ass", tools.subtitles, "FFmpeg")
+    if transcriber:  # servizio Whisper separato (WHISPER_URL): parlato -> testo e sottotitoli
+        g.add(f"{AUDIO} {VIDEO}", " ".join(TRANSCRIPTS), transcriber, "Whisper")
     # ebook
     g.add(EBOOK, EBOOK_OUT, tools.calibre, "Calibre", cost=1.2)
     g.add("pdf", "epub", tools.calibre, "Calibre", cost=1.2)

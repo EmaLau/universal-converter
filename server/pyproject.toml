@@ -1,13 +1,13 @@
 [project]
 name = "universal-converter"
-version = "2.4.0"
+version = "2.5.0"
 description = "Convertitore di file self-hosted: documenti, immagini, audio, video, ebook, archivi e strumenti PDF"
 requires-python = ">=3.11"
 license = "AGPL-3.0-only"
 dependencies = ["fastapi>=0.100", "uvicorn", "python-multipart"]
 
 [project.optional-dependencies]
-test = ["pytest", "httpx", "pyyaml"]
+test = ["pytest", "httpx", "pyyaml", "pymupdf", "python-docx", "python-pptx", "readability-lxml"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

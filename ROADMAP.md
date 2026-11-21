@@ -2,7 +2,7 @@
 
 Where Universal Converter is going. Released changes are in [CHANGELOG.md](CHANGELOG.md); ideas and requests are welcome as [issues](https://github.com/EmaLau/universal-converter/issues/new/choose).
 
-**Current version:** 2.4.0 (November 2026): ~200 formats, PDF tools with OCR, API keys, ready-made Docker image, Nextcloud app, web interface in English and Italian, image for amd64 and arm64, conversion options and presets, previews, installable app.
+**Current version:** 2.5.0 (November 2026): ~200 formats, PDF tools with OCR, API keys, ready-made Docker image, Nextcloud app, web interface in English and Italian, image for amd64 and arm64, conversion options and presets, previews, installable app, PDF slides to PowerPoint, PDF tables, web pages as articles, transcription, batch conversions.
 
 ## 2.2 — an English interface
 
@@ -37,11 +37,21 @@ Universal Converter stays focused on **formats**; the advanced PDF tools (passwo
 - [x] **Paste** from the clipboard and convert a file **from a web address**.
 - [x] **Installable app (PWA)** with the system Share menu (Web Share Target).
 
+## 2.5.0 — slides, tables, web pages, transcription and batches ✅
+
+- [x] **PDF → PowerPoint**: one editable slide per page (LibreOffice PDF import).
+- [x] **Layout option** for PDF → Word and PDF → PowerPoint: *editable* or *identical to the original* (pages as images).
+- [x] PDF → Word **recognises slides** and suggests the better alternatives in the result note.
+- [x] **PDF tables** to Excel, CSV or JSON.
+- [x] **Web page to PDF or Markdown** from an address: the main article, with its images.
+- [x] **Audio and video transcription** to text or SRT/VTT subtitles with a local Whisper service (separate, optional).
+- [x] **Batch conversion** of an archive (ZIP in, ZIP out) and whole **folders** on the web page.
+- [x] Extracting the audio from a video (*Video to MP3*) and the images from a PDF (through Plico) as ready-made tools.
+
 ## Later
 
 - Watched folder and automatic rules in Nextcloud, notifications when a long conversion ends.
 - iPhone Shortcuts documented, a small CLI (`uconv file.docx pdf`), n8n / Paperless-ngx integrations.
-- Audio and video transcription with a local Whisper (separate, optional image), PDF tables to CSV/Excel.
 - A "lite" image without Calibre, LibreOffice and video.
 
 ## Maintenance (ongoing)

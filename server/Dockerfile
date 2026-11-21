@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libarchive-tools 7zip xournalpp xvfb xauth \
       fonts-liberation fonts-dejavu-core fonts-crosextra-carlito fonts-crosextra-caladea fonts-noto-core \
       ca-certificates tini \
-    && pip3 install --no-cache-dir --break-system-packages pdf2docx==0.5.8 python-multipart==0.0.20 \
+    && pip3 install --no-cache-dir --break-system-packages pdf2docx==0.5.8 python-pptx==1.0.2 readability-lxml==0.9 python-multipart==0.0.20 \
     && rm -rf /var/lib/apt/lists/* /root/.cache
 
 ARG UID=1000

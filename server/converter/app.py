@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import json
 import re
 import shutil
 import tempfile
@@ -40,9 +41,10 @@ from starlette.background import BackgroundTask
 
 from . import __version__, apikeys, i18n, options, pdftools, webhooks
 from .config import Settings
-from .formats import ext_of, normalize
+from .formats import ext_of, normalize, safe_filename
 from .graph import Graph, default_graph
 from .jobs import JobError, JobManager
+from .transcribe import Transcriber
 from .runner import set_file_size_limit
 
 STATIC = Path(__file__).parent / "static"
@@ -73,6 +75,15 @@ PROGRAMS = {
     "qpdf": ["qpdf"], "OCRmyPDF": ["ocrmypdf"], "Tesseract": ["tesseract"],
 }
 MAX_ZIP_JOBS = 200
+
+
+def safe_folder(path) -> str:
+    """Cartella relativa per lo ZIP: niente percorsi assoluti, "..", parti vuote o nascoste; al massimo 10 livelli."""
+    if not isinstance(path, str):
+        return ""
+    parts = [safe_filename(p) for p in path.replace("\\", "/").split("/")
+             if p.strip() and p.strip() not in (".", "..") and not p.startswith(".")]
+    return "/".join(p for p in parts[:10] if p)
 
 
 @lru_cache(maxsize=1)
@@ -122,7 +133,9 @@ def client_ip(request: Request) -> str:
 def create_app(settings: Settings | None = None, graph: Graph | None = None,
                pdf_tools: dict[str, pdftools.PdfTool] | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
-    graph = graph or default_graph(settings.disabled)
+    transcriber = Transcriber(settings.whisper_url, settings.whisper_model, settings.whisper_api_key) \
+        if settings.whisper_url else None
+    graph = graph or default_graph(settings.disabled, transcriber)
     pdf_tools = pdftools.available_tools() if pdf_tools is None else pdf_tools
     manager = JobManager(settings, graph)
     keys = apikeys.KeyStore(settings.keys_dir, settings.admin_password, settings.require_key, settings.admin_login)
@@ -306,12 +319,14 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
         return {"options": options.definitions(options.applicable(plan, normalize(dst)))}
 
     @app.post("/api/fetch", status_code=201, **api)
-    async def fetch_url(request: Request, url: str = Form(...)):
+    async def fetch_url(request: Request, url: str = Form(...), article: bool = Form(False)):
         """Scarica un file da un indirizzo http(s) e lo tiene da parte per un'ora: la risposta dice nome,
         dimensione e formati di arrivo; poi si avvia la conversione con `POST /api/jobs` e `staged=<id>`.
-        Gli indirizzi della rete locale sono rifiutati (salvo `URL_ALLOW_PRIVATE=true`). Permesso: `convert`."""
+        Gli indirizzi della rete locale sono rifiutati (salvo `URL_ALLOW_PRIVATE=true`). Con `article=true` una
+        pagina web diventa il suo articolo principale (senza menu e pubblicita'), con le immagini incorporate,
+        pronto per PDF, Word, EPUB o Markdown. Permesso: `convert`."""
         kid = getattr(request.state, "key_id", "")
-        st = await manager.stage_url(url, key_id=kid, limits=keys.limits(kid) if kid else None)
+        st = await manager.stage_url(url, key_id=kid, limits=keys.limits(kid) if kid else None, article=article)
         ext = ext_of(st.name)
         return {"staged": st.id, "filename": st.name, "size": st.size, "ext": ext, "targets": graph.targets(ext)}
 
@@ -354,23 +369,32 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
         return public(request, job)
 
     @app.post("/api/jobs/zip", **api)
-    async def jobs_zip(request: Request, ids: str = Form(...), lang: str = Form("")):
+    async def jobs_zip(request: Request, ids: str = Form(...), lang: str = Form(""), paths: str = Form("")):
         """Scarica in un unico ZIP i risultati di piu' lavori finiti (`ids` separati da virgole, al massimo 200;
-        quelli non pronti vengono saltati). Permesso: `jobs`."""
+        quelli non pronti vengono saltati). `paths` (facoltativo, JSON `{"<id>": "cartella/sotto"}`) mette i
+        risultati nelle loro cartelle, come quando si trascina una cartella nella pagina. Permesso: `jobs`."""
         wanted = [i for i in dict.fromkeys(x.strip() for x in ids.split(",")) if i][:MAX_ZIP_JOBS]
         jobs = [j for j in (manager.jobs.get(i) for i in wanted) if j and j.state == "done" and j.out_path]
         if not jobs:
             raise JobError(404, "Nessun risultato pronto da scaricare")
         lg = lang if lang in ("it", "en") else lang_of(request)
+        try:
+            folders = json.loads(paths) if paths else {}
+        except ValueError:
+            folders = {}
+        if not isinstance(folders, dict):
+            folders = {}
         tmp = Path(tempfile.mkdtemp(dir=settings.work_dir))
         out, used = tmp / "results.zip", set()
         with zipfile.ZipFile(out, "w", zipfile.ZIP_STORED, allowZip64=True) as z:
             for j in jobs:
-                name, n = j.out_name, 1
+                folder = safe_folder(folders.get(j.id, ""))
+                base = f"{folder}/{j.out_name}" if folder else j.out_name
+                name, n = base, 1
                 while name in used:  # due risultati con lo stesso nome: "foto (2).jpg"
                     n += 1
-                    stem, dot, ext = j.out_name.rpartition(".")
-                    name = f"{stem} ({n}).{ext}" if dot else f"{j.out_name} ({n})"
+                    stem, dot, ext = base.rpartition(".")
+                    name = f"{stem} ({n}).{ext}" if dot else f"{base} ({n})"
                 used.add(name)
                 z.write(j.out_path, name)
         return FileResponse(out, filename="converted.zip" if lg == "en" else "convertiti.zip",

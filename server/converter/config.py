@@ -43,6 +43,9 @@ class Settings:
     previews: bool = True           # anteprima dei risultati nella pagina (GET /api/jobs/{id}/preview)
     url_import: bool = True         # conversione di un file da un indirizzo web (POST /api/fetch)
     url_allow_private: bool = False # anche indirizzi della rete locale per POST /api/fetch
+    whisper_url: str = ""           # servizio di trascrizione compatibile con OpenAI (vuoto = niente trascrizioni)
+    whisper_model: str = ""         # modello chiesto al servizio (es. Systran/faster-whisper-small)
+    whisper_api_key: str = ""       # chiave per il servizio, se la chiede
 
     @property
     def jobs_dir(self) -> Path:
@@ -82,4 +85,7 @@ class Settings:
             previews=truthy(env.get("PREVIEWS", "true")),
             url_import=truthy(env.get("URL_IMPORT", "true")),
             url_allow_private=truthy(env.get("URL_ALLOW_PRIVATE")),
+            whisper_url=env.get("WHISPER_URL", "").strip(),
+            whisper_model=env.get("WHISPER_MODEL", "Systran/faster-whisper-small").strip(),
+            whisper_api_key=env.get("WHISPER_API_KEY", ""),
         )
