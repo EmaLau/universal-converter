@@ -9,17 +9,26 @@ ALIASES = {"jpeg": "jpg", "jfif": "jpg", "jpe": "jpg", "tif": "tiff", "htm": "ht
            "text": "txt", "ppsx": "pptx", "pps": "ppt", "dotx": "docx", "dot": "doc", "xlsm": "xlsx",
            "docm": "docx", "pptm": "pptx", "yml": "yaml", "j2k": "jp2", "jpf": "jp2", "asciidoc": "adoc",
            "texinfo": "texi", "docbook": "dbk", "mediawiki": "wiki"}
+GRAPHVIZ_START = ("digraph", "graph", "strict", "/*", "//")  # un .dot che inizia cosi' e' Graphviz, non Word
+
+
+def is_graphviz(head: bytes) -> bool:
+    """I primi byte di un file .dot: grafo di Graphviz (testo) o modello di Word 97 (binario)?"""
+    text = head.lstrip(b"\xef\xbb\xbf").lstrip().lower()
+    return bool(text) and b"\x00" not in head[:512] and text.startswith(tuple(s.encode() for s in GRAPHVIZ_START))
+
+
 COMPOUND = ("tar.gz", "tar.bz2", "tar.xz", "tar.zst")
 _COMPOUND_ALIASES = ("tgz", "tbz2", "tbz", "txz", "tzst")
 
 CATEGORIES = {  # categoria mostrata nella pagina, nell'ordine dei menu
     "Documento": ["pdf", "docx", "odt", "doc", "rtf", "txt", "html", "md", "tex", "rst", "adoc", "typ", "org",
                   "pages", "wpd", "wps", "fodt", "abw", "sxw", "lwp", "hwp", "ipynb", "textile", "dbk", "wiki",
-                  "texi", "opml", "t2t", "xopp"],
+                  "texi", "opml", "t2t", "xopp", "eml", "msg"],
     "Foglio di calcolo": ["xlsx", "ods", "xls", "csv", "tsv", "numbers", "fods", "xlsb", "sxc", "dif", "slk",
                           "dbf", "wk1"],
     "Presentazione": ["pptx", "odp", "ppt", "key", "fodp", "sxi"],
-    "Disegno": ["svg", "eps", "ps", "vsd", "vsdx", "odg", "pub", "cdr", "wmf", "emf"],
+    "Disegno": ["svg", "eps", "ps", "vsd", "vsdx", "odg", "pub", "cdr", "wmf", "emf", "gv"],
     "Immagine": ["jpg", "png", "webp", "heic", "avif", "gif", "tiff", "bmp", "ico", "jp2", "qoi", "tga", "psd",
                  "ppm", "pbm", "pgm", "pnm", "pcx", "dds", "hdr", "xcf", "xpm", "apng",
                  "dng", "cr2", "cr3", "nef", "arw", "raf", "orf", "rw2"],

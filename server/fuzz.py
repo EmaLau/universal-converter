@@ -113,6 +113,15 @@ def cases() -> list[tuple]:
         ("zip-bomb-batch.zip", zip_bomb(), "pdf"),
         ("random-batch.zip", rnd, "pdf"),
         ("many-files-batch.zip", many_files(2500), "md"),
+        # 2.6: email, Graphviz, sottotitoli dai video, CSV per foglio, scansioni con OCR automatico
+        ("random.eml", rnd, "pdf"),
+        ("random.msg", rnd, "pdf"),
+        ("random-attachments.msg", rnd, "zip"),
+        ("random.gv", rnd, "svg"),
+        ("include.gv", b'digraph { a [image="/etc/passwd"]; b [shapefile="/etc/shadow"]; a -> b }', "png"),
+        ("random-subs.mkv", rnd, "srt"),
+        ("random-sheets.ods", rnd, "csv"),
+        ("page-loop-ocr.pdf", pdf_page_loop(), "docx"),
     ]
 
 

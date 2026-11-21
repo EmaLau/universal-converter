@@ -17,7 +17,8 @@ TERMS = {
     "Lingue": "Languages",
     "Qualità (1-100)": "Quality (1-100)", "Lato lungo massimo (pixel)": "Longest side (pixels)",
     "Inizio (es. 0:30)": "Start (e.g. 0:30)", "Fine (es. 1:45)": "End (e.g. 1:45)",
-    "Pagine (es. 2 oppure 3-5)": "Pages (e.g. 2 or 3-5)", "Impaginazione": "Layout", "Lingua del parlato": "Spoken language",
+    "Pagine (es. 2 oppure 3-5)": "Pages (e.g. 2 or 3-5)", "Impaginazione": "Layout", "Sottotitoli da aggiungere (SRT, VTT, ASS)": "Subtitles to add (SRT, VTT, ASS)",
+    "Sottotitoli impressi nel video (sempre visibili)": "Subtitles burned into the video (always visible)", "Lingua del parlato": "Spoken language",
 }
 
 _EN: list[tuple[str, str]] = [
@@ -109,6 +110,25 @@ _EN: list[tuple[str, str]] = [
      "no tables found in the PDF (if it is a scan, run OCR PDF first)"),
     (r"1 tabella trovata", "1 table found"),
     (r"PDF danneggiato o non leggibile", "damaged or unreadable PDF"),
+    (r"era una scansione: testo riconosciuto con l'OCR", "it was a scan: text recognised with OCR"),
+    (r"OCR della scansione \((.*)\)", r"OCR of the scan (\1)"),
+    (r"il PDF ha (\d+) pagine, il Word se ne impagina (\d+): prova Impaginazione «Identica»",
+     r"the PDF has \1 pages, the Word file lays out on \2: try Layout “Identical”"),
+    (r"(\d+) fogli, un CSV per foglio", r"\1 sheets, one CSV per sheet"),
+    (r"il video non ha sottotitoli testuali; per trascrivere il parlato serve il servizio Whisper \(WHISPER_URL\)",
+     "the video has no text subtitles; transcribing the speech needs the Whisper service (WHISPER_URL)"),
+    (r"sottotitoli presi dal video(.*)", r"subtitles taken from the video\1"),
+    (r"sottotitoli impressi nel video: il formato (\S+) non ha tracce di sottotitoli",
+     r"subtitles burned into the video: the \1 format has no subtitle tracks"),
+    (r"email danneggiata o non leggibile", "damaged or unreadable email"),
+    (r"nessun allegato nell'email", "no attachments in the email"),
+    (r"I sottotitoli si possono aggiungere solo a un video", "Subtitles can only be added to a video"),
+    (r"Sottotitoli non riconosciuti: \.(\S+) \(servono SRT, VTT o ASS\)",
+     r"Unrecognised subtitles: .\1 (SRT, VTT or ASS needed)"),
+    (r"Manca il file dei sottotitoli", "The subtitle file is missing"),
+    (r"File dei sottotitoli vuoto o troppo grande \(al massimo 10 MB\)", "Subtitle file empty or too large (10 MB at most)"),
+    (r"'(\w+)' va mandato come file, non dentro options", r"'\1' must be sent as a file, not inside options"),
+    (r"(\S+) ha superato la memoria massima \(([\d.]+) GB\)", r"\1 exceeded the maximum memory (\2 GB)"),
     (r"nessuna traccia audio da trascrivere", "no audio track to transcribe"),
     (r"Estrazione dell'archivio", "Extracting the archive"),
     (r"Creazione dello ZIP", "Creating the ZIP"),
@@ -173,6 +193,8 @@ def t(msg, lang: str):
         return msg
     if msg in TERMS:
         return TERMS[msg]
+    if "; " in msg and not any(rx.match(msg) for rx, _ in _TABLE):  # piu' note insieme: una alla volta
+        return "; ".join(t(part, lang) for part in msg.split("; "))
     for rx, en in _TABLE:
         m = rx.match(msg)
         if m:

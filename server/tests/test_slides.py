@@ -70,6 +70,7 @@ def run_converter(fn, tmp_path, monkeypatch, opts, slides):
 
 
 def test_docx_editable_warns_on_slides(tmp_path, monkeypatch):
+    monkeypatch.setattr(tools, "AUTO_OCR", False)  # qui conta solo l'avviso (l'OCR ha i suoi test)
     job, calls = run_converter(tools.pdf_to_docx, tmp_path, monkeypatch, {}, slides=True)
     assert "pdf2docx" in calls[0][2] and calls[1][0] == "pdfinfo"
     assert job.note.startswith("sembra una presentazione")

@@ -18,8 +18,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ocrmypdf tesseract-ocr tesseract-ocr-ita tesseract-ocr-eng tesseract-ocr-osd pngquant unpaper \
       libarchive-tools 7zip xournalpp xvfb xauth \
       fonts-liberation fonts-dejavu-core fonts-crosextra-carlito fonts-crosextra-caladea fonts-noto-core \
+      fonts-urw-base35 fonts-adf-gillius fonts-ebgaramond fonts-open-sans graphviz \
       ca-certificates tini \
-    && pip3 install --no-cache-dir --break-system-packages pdf2docx==0.5.8 python-pptx==1.0.2 readability-lxml==0.9 python-multipart==0.0.20 \
+    && pip3 install --no-cache-dir --break-system-packages pdf2docx==0.5.8 python-pptx==1.0.2 readability-lxml==0.9 extract-msg==0.58.2 python-multipart==0.0.20 \
     && rm -rf /var/lib/apt/lists/* /root/.cache
 
 ARG UID=1000
@@ -28,6 +29,8 @@ RUN groupadd -g "$GID" converter 2>/dev/null || true \
     && useradd -u "$UID" -g "$GID" -M -d /work/home -s /usr/sbin/nologin converter 2>/dev/null || true \
     && mkdir -p /work && chown "$UID:$GID" /work
 
+# caratteri liberi al posto di Gill Sans, Century Gothic, Garamond, Segoe UI... (vedi fonts.conf)
+COPY fonts.conf /etc/fonts/conf.d/60-universal-converter.conf
 COPY converter /app/converter
 COPY selftest.py fuzz.py /app/
 # Documentazione: dal Markdown alle pagine /docs, in italiano e in inglese
@@ -43,7 +46,7 @@ RUN pandoc /app/docs/documentazione.md --standalone --section-divs --toc --toc-d
       -V "subtitle=Installation, configuration, API, internals, Nextcloud and development." \
       -o /app/converter/static/docs-en.html
 
-ENV WORK_DIR=/work HOME=/work/home TMPDIR=/work/tmp QT_QPA_PLATFORM=offscreen QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox
+ENV WORK_DIR=/work HOME=/work/home TMPDIR=/work/tmp FONTS_DIR=/work/fonts QT_QPA_PLATFORM=offscreen QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox
 USER ${UID}:${GID}
 WORKDIR /app
 VOLUME /work

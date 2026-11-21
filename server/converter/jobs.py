@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import re
 import shutil
 import time
@@ -18,7 +19,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from . import fetch, i18n, options, preview, webhooks, webpage
 from .config import Settings
-from .formats import ext_of, normalize, safe_filename, stem_of
+from .formats import ext_of, is_graphviz, normalize, safe_filename, stem_of
 from .graph import Graph
 from .runner import ConvError, run
 
@@ -34,6 +35,9 @@ class Upload(Protocol):
     async def read(self, size: int = -1) -> bytes: ...
 
 MAX_BATCH_FILES = 2000  # file di un archivio convertiti in blocco
+SUBTITLE_EXTS = ("srt", "vtt", "ass", "ssa")
+MAX_SUBTITLES_BYTES = 10 * 1024 * 1024
+STATE_FILE = "job.json"  # stato del lavoro su disco: con KEEP_JOBS sopravvive al riavvio
 
 
 class JobError(Exception):
@@ -73,7 +77,9 @@ class Job:
     options: dict = field(default_factory=dict)  # opzioni di conversione (options.py)
     preview: str = ""                    # tipo di anteprima del risultato (preview.py)
     batch: bool = False                  # archivio: ogni file contenuto convertito in ``target``
+    extras: dict = field(default_factory=dict)  # file in piu' (es. "subtitles": percorso dei sottotitoli da aggiungere)
     task: asyncio.Task | None = field(default=None, repr=False)
+    tool_name: str = ""                  # nome dello strumento PDF (per riprenderlo dopo un riavvio)
 
     @property
     def input_path(self) -> Path:
@@ -112,16 +118,93 @@ class JobManager:
         self.usage: dict[tuple[str, str], int] = {}
         self.staged: dict[str, Staged] = {}
         self._preview_sem = asyncio.Semaphore(1)
+        self.pdf_tools: dict = {}          # nome -> PdfTool, per riprendere dopo un riavvio gli strumenti PDF in coda
+        self.restored = 0                  # lavori ripresi all'avvio (KEEP_JOBS)
+        self._stopping = False
 
     # -------------------------------------------------------------------------------------- ciclo di vita
     async def start(self) -> None:
         self._sem = asyncio.Semaphore(self.settings.max_parallel)
-        shutil.rmtree(self.settings.jobs_dir, ignore_errors=True)  # lavori di un avvio precedente: orfani
+        if not self.settings.keep_jobs:
+            shutil.rmtree(self.settings.jobs_dir, ignore_errors=True)  # lavori di un avvio precedente: via
         shutil.rmtree(self.staged_dir, ignore_errors=True)
         self.settings.jobs_dir.mkdir(parents=True, exist_ok=True)
+        if self.settings.keep_jobs:
+            self._restore()
         self._janitor = asyncio.create_task(self._janitor_loop())
 
+    # --------------------------------------------------------------------------- stato su disco (KEEP_JOBS)
+    def _persist(self, job: Job) -> None:
+        """Scrive job.json nella cartella del lavoro (percorsi relativi alla cartella)."""
+        if not self.settings.keep_jobs or not job.dir.exists():
+            return
+        rel = lambda p: str(Path(p).relative_to(job.dir)) if p else ""  # noqa: E731
+        data = {"version": 1, "id": job.id, "filename": job.filename, "src_ext": job.src_ext, "target": job.target,
+                "meta": job.meta, "state": job.state, "created": job.created, "started": job.started,
+                "finished": job.finished, "error": job.error, "out_path": rel(job.out_path),
+                "out_name": job.out_name, "note": job.note, "tool": job.tool.name if job.tool else "",
+                "opts": job.opts, "lang": job.lang, "inputs": [rel(p) for p in job.inputs], "key_id": job.key_id,
+                "callback_url": job.callback_url, "webhook": job.webhook, "size_in": job.size_in,
+                "options": job.options, "preview": job.preview, "batch": job.batch,
+                "extras": {k: rel(v) for k, v in job.extras.items()}}
+        tmp = job.dir / f"{STATE_FILE}.tmp"
+        try:
+            tmp.write_text(json.dumps(data), encoding="utf-8")
+            tmp.replace(job.dir / STATE_FILE)
+        except (OSError, TypeError, ValueError):
+            tmp.unlink(missing_ok=True)
+
+    def _restore(self) -> None:
+        """Riprende i lavori di un avvio precedente: quelli finiti restano scaricabili fino alla scadenza, quelli
+        in coda o interrotti ripartono da capo; il resto (scaduti, senza stato, file mancanti) viene cancellato."""
+        now = time.time()
+        for d in sorted(self.settings.jobs_dir.iterdir(), key=lambda p: p.stat().st_mtime):
+            job = self._load(d) if d.is_dir() and re.fullmatch(r"[0-9a-f]{32}", d.name) else None
+            if job is None:
+                shutil.rmtree(d, ignore_errors=True) if d.is_dir() else d.unlink(missing_ok=True)
+                continue
+            if job.state in ("done", "error"):
+                expired = now - job.finished > self.settings.retain_hours * 3600
+                if expired or (job.state == "done" and not (job.out_path and job.out_path.exists())):
+                    shutil.rmtree(d, ignore_errors=True)
+                    continue
+                self.jobs[job.id] = job
+            else:  # in coda o interrotto a meta': si ricomincia dai file caricati
+                if not all(f.exists() for f in job.input_files()) or (job.tool is None and job.tool_name):
+                    shutil.rmtree(d, ignore_errors=True)
+                    continue
+                for sub in d.iterdir():
+                    if sub.is_dir():
+                        shutil.rmtree(sub, ignore_errors=True)
+                job.state, job.progress, job.step, job.started, job.out_path = "queued", None, "", 0.0, None
+                self.jobs[job.id] = job
+                job.task = asyncio.create_task(self._process(job))
+            self.restored += 1
+
+    def _load(self, d: Path) -> Job | None:
+        try:
+            data = json.loads((d / STATE_FILE).read_text(encoding="utf-8"))
+            if data.get("version") != 1 or data["id"] != d.name:
+                return None
+            ab = lambda r: d / r if r else None  # noqa: E731
+            job = Job(id=data["id"], dir=d, filename=data["filename"], src_ext=data["src_ext"], target=data["target"],
+                      meta=data["meta"], state=data["state"], created=data["created"], started=data["started"],
+                      finished=data["finished"], error=data["error"], out_path=ab(data["out_path"]),
+                      out_name=data["out_name"], note=data["note"], opts=data["opts"], lang=data["lang"],
+                      inputs=[d / r for r in data["inputs"]], key_id=data["key_id"],
+                      callback_url=data["callback_url"], webhook=data["webhook"], size_in=data["size_in"],
+                      options=data["options"], preview=data["preview"], batch=data["batch"],
+                      extras={k: str(d / v) for k, v in data["extras"].items()})
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+        job.tool_name = data.get("tool", "")
+        job.tool = self.pdf_tools.get(job.tool_name) if job.tool_name else None
+        if any(".." in Path(p).parts for p in [*data["inputs"], data["out_path"], *data["extras"].values()]):
+            return None
+        return job
+
     async def stop(self) -> None:
+        self._stopping = True
         tasks = [t for t in [self._janitor, *self._hooks, *(j.task for j in self.jobs.values())] if t and not t.done()]
         for t in tasks:
             t.cancel()
@@ -136,14 +219,20 @@ class JobManager:
     # ------------------------------------------------------------------------------------------- lavori
     async def create(self, upload: Upload | None, filename: str | None, target: str, meta: str = "", *,
                      opts: str | dict | None = None, staged: str = "", lang: str = "it", key_id: str = "",
-                     limits: dict | None = None, callback_url: str = "") -> Job:
-        """Nuovo lavoro da un file caricato oppure (``staged``) da un file gia' scaricato con stage_url()."""
+                     limits: dict | None = None, callback_url: str = "",
+                     subtitles: tuple[Upload, str] | None = None) -> Job:
+        """Nuovo lavoro da un file caricato oppure (``staged``) da un file gia' scaricato con stage_url().
+        ``subtitles``: (file, nome) dei sottotitoli da aggiungere a un video."""
         st = None
         if staged:
             st = self.staged.get(staged)
             if not st or st.key_id != key_id:
                 raise JobError(404, "File scaricato non trovato (scaduto o server riavviato)")
             filename = st.name
+            if filename.lower().endswith(".dot"):
+                with st.path.open("rb") as fh:
+                    if is_graphviz(fh.read(1024)):
+                        filename = filename[:-4] + ".gv"
         name = safe_filename(filename)
         src, target = ext_of(name), normalize(target)
         plan = self.graph.plan(src, target)
@@ -154,6 +243,15 @@ class JobManager:
             clean = options.parse(opts, plan, target)
         except options.OptionError as e:
             raise JobError(400, str(e)) from None
+        subs_ext = ""
+        if subtitles:
+            subs_ext = ext_of(safe_filename(subtitles[1]))
+            if "subtitles" not in options.applicable(plan, target):
+                raise JobError(400, "I sottotitoli si possono aggiungere solo a un video")
+            if subs_ext not in SUBTITLE_EXTS:
+                raise JobError(400, f"Sottotitoli non riconosciuti: .{subs_ext or '?'} (servono SRT, VTT o ASS)")
+        elif clean.get("burn_subtitles"):
+            raise JobError(400, "Manca il file dei sottotitoli")
         if len(self.jobs) >= self.settings.max_queue:
             raise JobError(503, "Troppi lavori in corso: riprova tra poco")
         budget = None if st else self._check_limits(key_id, limits)
@@ -161,6 +259,17 @@ class JobManager:
         job = Job(id=job_id, dir=self.settings.jobs_dir / job_id, filename=name, src_ext=src, target=target,
                   meta=meta[:2000], lang=lang, key_id=key_id, callback_url=callback_url, options=clean, batch=batch)
         job.dir.mkdir(parents=True)
+        if subtitles:
+            subs_path = job.dir / f"subs.{subs_ext}"
+            try:
+                n = await self._save(subtitles[0], subs_path, None)
+            except BaseException:
+                shutil.rmtree(job.dir, ignore_errors=True)
+                raise
+            if not 0 < n <= MAX_SUBTITLES_BYTES:
+                shutil.rmtree(job.dir, ignore_errors=True)
+                raise JobError(400, "File dei sottotitoli vuoto o troppo grande (al massimo 10 MB)")
+            job.extras["subtitles"] = str(subs_path)
         if st:  # gia' contato nel volume della chiave quando e' stato scaricato
             self.staged.pop(st.id, None)
             shutil.move(st.path, job.input_path)
@@ -178,6 +287,7 @@ class JobManager:
                 raise JobError(400, "File vuoto")
             self._account(job, size)
         self.jobs[job.id] = job
+        self._persist(job)
         job.task = asyncio.create_task(self._process(job))
         return job
 
@@ -261,6 +371,7 @@ class JobManager:
             raise
         self._account(job, total)
         self.jobs[job.id] = job
+        self._persist(job)
         job.task = asyncio.create_task(self._process(job))
         return job
 
@@ -363,23 +474,35 @@ class JobManager:
                 if self.settings.previews and job.out_path:
                     job.preview = preview.kind(job.out_path, job.out_name, self.graph)
             except asyncio.CancelledError:
-                job.state, job.error = "error", "annullato"
+                if self._stopping and self.settings.keep_jobs:
+                    job.state, job.progress, job.step = "queued", None, ""  # servizio che si ferma: riparte al riavvio
+                else:
+                    job.state, job.error = "error", "annullato"
                 raise
             except ConvError as e:
                 job.state, job.error = "error", self._clean(job, str(e))
             except Exception as e:  # noqa: BLE001 - qualsiasi errore va mostrato, non deve bloccare la coda
                 job.state, job.error = "error", self._clean(job, f"errore interno: {e!r}")
             finally:
-                job.finished = time.time()
-                for f in job.input_files():
-                    f.unlink(missing_ok=True)
-                kind = job.tool.name if job.tool else "convert"
-                self.completed[(kind, job.state)] += 1
-                self.duration[kind] += job.finished - job.started
-                if job.callback_url and job.state in ("done", "error"):
-                    t = asyncio.create_task(self._webhook(job))
-                    self._hooks.add(t)
-                    t.add_done_callback(self._hooks.discard)
+                self._finish(job)
+
+    def _finish(self, job: Job) -> None:
+        """Fine di un lavoro: cancella i file caricati, salva lo stato, conta le metriche, chiama il webhook.
+        Un lavoro interrotto dallo spegnimento (di nuovo "queued") tiene file e stato per il riavvio."""
+        if job.state == "queued":
+            self._persist(job)
+            return
+        job.finished = time.time()
+        for f in job.input_files():
+            f.unlink(missing_ok=True)
+        self._persist(job)
+        kind = job.tool.name if job.tool else "convert"
+        self.completed[(kind, job.state)] += 1
+        self.duration[kind] += job.finished - job.started
+        if job.callback_url and job.state in ("done", "error"):
+            t = asyncio.create_task(self._webhook(job))
+            self._hooks.add(t)
+            t.add_done_callback(self._hooks.discard)
 
     @staticmethod
     def _clean(job: Job, msg: str) -> str:
@@ -444,6 +567,9 @@ class JobManager:
         for n, f in enumerate(files, 1):
             rel = f.relative_to(tree)
             src = normalize(ext_of(f.name)) if ext_of(f.name) else ""
+            if f.name.lower().endswith(".dot"):
+                with f.open("rb") as fh:
+                    src = "gv" if is_graphviz(fh.read(1024)) else src
             job.progress = (n - 1) / max(len(files), 1)
             dest = out_tree / rel.parent / f"{stem_of(f.name)}.{job.target}"
             if src == job.target:

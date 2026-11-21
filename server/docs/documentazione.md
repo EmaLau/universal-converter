@@ -53,7 +53,11 @@ L'elenco completo e sempre aggiornato delle combinazioni si trova nella pagina w
 |---|---|---|
 | Word, ODT, RTF, Pages | PDF | LibreOffice |
 | PDF | Word | pdf2docx (solo da un PDF originale, non da uno appena generato); con *Impaginazione: identica* ogni pagina diventa un'immagine |
-| PDF | Excel, CSV o JSON | PyMuPDF: le **tabelle** del PDF (in Excel un foglio per tabella); serve un PDF con testo selezionabile |
+| PDF | Excel, CSV o JSON | PyMuPDF: le **tabelle** del PDF (in Excel un foglio per tabella); le scansioni passano prima dall'OCR automatico |
+| Email EML e MSG (Outlook) | PDF, Word, HTML, Markdown… o ZIP | Python: messaggio leggibile con intestazioni e immagini incorporate, oppure gli **allegati** in uno ZIP |
+| Graphviz (`.gv`, `.dot`) | SVG, PNG, PDF | Graphviz (`dot`) |
+| Video con sottotitoli | SRT, VTT, TXT | FFmpeg: la traccia di sottotitoli contenuta nel video (senza Whisper) |
+| Excel con più fogli | CSV | LibreOffice: un CSV per foglio, in uno ZIP |
 | Audio e video | SRT, VTT o testo | **Trascrizione** con un servizio Whisper separato e facoltativo (`WHISPER_URL`) |
 | ZIP, 7Z, RAR, TAR… | qualsiasi formato tra i più usati | **Conversione in blocco**: ogni file dell'archivio nel formato scelto, in uno ZIP con le stesse cartelle |
 | PDF (slide) | PowerPoint | LibreOffice: una slide per pagina, con le caselle di testo modificabili al loro posto; con *Impaginazione: identica* ogni pagina diventa un'immagine |
@@ -148,6 +152,11 @@ Le impostazioni si scrivono in `.env`, nella cartella principale del progetto (p
 | `WHISPER_URL` | *(vuoto)* | Indirizzo di un servizio di trascrizione compatibile con OpenAI (`POST /v1/audio/transcriptions`), es. `http://whisper:8000`. Se è impostato compaiono audio/video → SRT, VTT e TXT (vedi [Trascrizione](#trascrizione-con-whisper)). |
 | `WHISPER_MODEL` | `Systran/faster-whisper-small` | Modello chiesto al servizio (campo `model`); vuoto = quello predefinito del servizio. |
 | `WHISPER_API_KEY` | *(vuoto)* | Chiave per il servizio di trascrizione, se la chiede (`Authorization: Bearer`). |
+| `AUTO_OCR` | `true` | OCR automatico delle scansioni prima di PDF → Word, Excel/CSV/JSON e testo (vedi [Qualità dei risultati](#qualità-dei-risultati)). |
+| `OCR_LANG` | `ita+eng` | Lingue di Tesseract per l'OCR automatico (installate nell'immagine: `ita`, `eng`). |
+| `FONTS_DIR` | `/work/fonts` | Cartella con i propri caratteri (TTF, OTF): letti all'avvio, hanno la precedenza sui sostituti. |
+| `TOOL_MEMORY_GB` | `3` | Memoria massima dei convertitori scritti in Python (pdf2docx, PyMuPDF, email, Graphviz). |
+| `KEEP_JOBS` | `true` | I lavori sopravvivono al riavvio: quelli finiti restano scaricabili, quelli in coda o interrotti ripartono. `false` = un riavvio cancella tutto, come prima della 2.6. |
 | `DATA_DIR` | `/work/data` | Cartella delle chiavi API e delle impostazioni dell'area admin. |
 | `CONVERTER_CPUS` | `4` | CPU massime del container. |
 | `CONVERTER_MEMORY` | `4G` | Memoria massima del container. |
@@ -216,6 +225,18 @@ I **preset** riempiono formato e opzioni in un clic. Ci sono quelli predefiniti 
 
 - **Cartelle**: si può trascinare una cartella intera nella pagina, o sceglierla con **Una cartella**. Ogni file compare nella lista con il suo percorso, si sceglie il formato (anche per tutti insieme con *Converti tutti in*) e **Scarica tutti** restituisce uno ZIP con le stesse sottocartelle.
 - **Archivi**: per uno ZIP (o 7Z, RAR, TAR, TAR.GZ…) il menu offre anche *Ogni file in PDF*, *Ogni file in JPG* e così via. Il server estrae l'archivio, converte ogni file che può arrivare a quel formato, copia quelli che ci sono già e salta gli altri; il risultato è `<nome>-<formato>.zip` con le stesse cartelle. Se qualcosa è stato saltato o non è riuscito, nello ZIP c'è `resoconto-conversione.txt`. File nascosti e `__MACOSX` vengono ignorati; al massimo 2.000 file per archivio.
+
+## Qualità dei risultati
+
+Dalla 2.6 il Convertitore controlla e corregge da solo i casi che davano risultati brutti:
+
+- **OCR automatico.** Se un PDF non ha testo selezionabile nelle prime pagine (una scansione), PDF → Word, PDF → Excel/CSV/JSON e PDF → testo passano prima da OCRmyPDF (`OCR_LANG`, di base italiano e inglese). La nota del risultato lo dice. `AUTO_OCR=false` lo spegne.
+- **Caratteri sostitutivi.** I caratteri commerciali più usati hanno un sostituto libero con le stesse misure o il più simile possibile: Calibri → Carlito, Cambria → Caladea, Gill Sans → Gillius ADF, Century Gothic → URW Gothic, Garamond → EB Garamond, Palatino/Book Antiqua → P052, Segoe UI → Open Sans e altri (`server/fonts.conf`). Così il testo non esce dalle caselle e le pagine non aumentano. Chi ha la licenza dei caratteri originali può metterli nella cartella `FONTS_DIR` (di base `/work/fonts`, nel volume): vengono letti all'avvio e hanno la precedenza.
+- **Controllo del risultato.** Dopo PDF → Word il Convertitore impagina il Word e confronta le pagine con il PDF: se cambiano molto (per esempio 9 → 17) lo scrive nella nota e suggerisce *Impaginazione: identica*.
+- **Sottotitoli.** Video → SRT/VTT/TXT prende la traccia di sottotitoli contenuta nel video (MKV, MP4…), senza bisogno di Whisper; se non c'è e Whisper è configurato, trascrive il parlato. Per **aggiungere** sottotitoli a un video, nel riquadro Opzioni c'è *Sottotitoli da aggiungere*: diventano una traccia che si accende e spegne nel lettore (MP4, MOV, MKV, WEBM), oppure, con *Sottotitoli impressi nel video*, sono disegnati nell'immagine e sempre visibili (gli altri formati li imprimono sempre).
+- **Un CSV per foglio.** Excel, ODS o Numbers con più fogli → CSV restituisce uno ZIP con un CSV per foglio (prima usciva solo il primo).
+- **Email.** EML e MSG di Outlook diventano un documento leggibile (oggetto, mittente, destinatari, data, elenco degli allegati, testo con le immagini incorporate) da cui si arriva a PDF, Word, Markdown; oppure → ZIP con gli allegati. Le immagini esterne, spesso usate per sapere se una mail è stata letta, non vengono caricate.
+- **Diagrammi.** I file Graphviz (`.gv`, e i `.dot` che contengono un grafo) diventano SVG, PNG o PDF. Un `.dot` binario resta un modello di Word.
 
 ## Tabelle dei PDF
 
@@ -371,6 +392,7 @@ curl http://localhost:8080/api/options/png/jpg
 | `mono` | audio | `true`: un solo canale |
 | `dpi` | PDF → JPG/PNG | `72`, `150`, `300` |
 | `pages` | PDF → JPG/PNG | `2`, `3-5`, `4-` |
+| `burn_subtitles` | video | `true`: i sottotitoli mandati nel campo `subtitles` sono impressi nell'immagine (si ricodifica) |
 | `language` | audio/video → SRT, VTT, TXT (Whisper) | `it`, `en`, `fr`, `de`, `es`, `pt`, `nl`, `pl`, `ro`, `ru`, `uk`, `ar`, `zh`, `ja` (vuoto = automatica) |
 | `layout` | PDF → DOCX, PDF → PPTX | `exact`: ogni pagina come immagine, identica all'originale (vuoto = modificabile) |
 
@@ -410,6 +432,7 @@ Richiesta `multipart/form-data` con i campi:
 | `meta` | no | Testo libero (al massimo 2.000 caratteri) restituito nello stato del lavoro: utile per chi integra il servizio. |
 | `callback_url` | no | Webhook: un indirizzo `http`/`https` chiamato con `POST` quando il lavoro finisce (vedi *Webhook*). |
 | `options` | no | Opzioni di conversione in JSON, es. `{"quality": 80, "max_size": 1920}` (vedi `GET /api/options/{src}/{dst}`). Opzioni sconosciute o che non valgono per la conversione: `400`. |
+| `subtitles` | no | File SRT, VTT o ASS (al massimo 10 MB) da aggiungere a un video: come traccia, oppure impresso con l'opzione `burn_subtitles`. Solo per le conversioni verso un video (anche nello stesso formato, es. `mp4` → `mp4`); altrimenti `400`. |
 
 Con un archivio (`zip`, `7z`, `rar`, `tar`, `tar.gz`…) e un `target` che non è un archivio (tra quelli di `batch` in `/api/formats`) il lavoro è una **conversione in blocco**: il risultato è uno ZIP con ogni file convertito nelle stesse cartelle, e la nota dice quanti file sono stati convertiti, copiati, saltati o non riusciti. Le opzioni non valgono per le conversioni in blocco.
 | `staged` | al posto di `file` | Id restituito da `POST /api/fetch`: converte il file scaricato da un indirizzo. Si usa una volta sola. |
@@ -602,6 +625,7 @@ Tecnicamente si potrebbe trasformare un foglio Excel in MP3 (Excel → PDF → i
 3. **Passaggi.** Ogni passaggio lavora in una propria cartella (`step1`, `step2`…). Il risultato di un passaggio diventa l'ingresso del successivo, con l'estensione corretta. Un file vuoto viene considerato un errore.
 4. **Fine.** Il file caricato viene cancellato subito; il risultato resta disponibile per `RETAIN_HOURS` ore.
 5. **Pulizia.** Ogni 10 minuti il server cancella i lavori finiti da più di `RETAIN_HOURS` ore.
+6. **Riavvio.** Ogni lavoro tiene il suo stato in `job.json`. Con `KEEP_JOBS=true` (predefinito), all'avvio quelli finiti tornano disponibili fino alla scadenza e quelli in coda o interrotti ripartono da capo con i file caricati; quelli scaduti o senza stato vengono cancellati. Un lavoro interrotto dallo spegnimento non viene segnato come errore.
 
 ## Esecuzione dei programmi
 
@@ -760,7 +784,7 @@ Per far riconvertire un file basta cancellare la sua voce da `state.json`, oppur
 # Sicurezza e privacy
 
 - **Tutto in locale.** I file vengono elaborati sul server e non vengono mai inviati a servizi esterni. Il container non ha bisogno di Internet per funzionare.
-- **Cancellazione automatica.** Il file caricato viene cancellato appena finisce la conversione; il risultato dopo `RETAIN_HOURS` ore, oppure subito con `DELETE`. Un riavvio cancella tutti i lavori.
+- **Cancellazione automatica.** Il file caricato viene cancellato appena finisce la conversione; il risultato dopo `RETAIN_HOURS` ore, oppure subito con `DELETE`. Con `KEEP_JOBS=true` un riavvio non cancella i lavori (restano solo fino alla scadenza); con `KEEP_JOBS=false` li cancella tutti.
 - **Chiavi API.** Con l'interruttore *Chiave obbligatoria per le API* attivo, gli script devono avere una [chiave](#chiavi-api). La pagina web invece resta aperta a chi raggiunge la porta: la sessione la ottiene chiunque la apra, quindi la chiave serve a mettere ordine tra gli script e a revocarli, non a proteggere il servizio.
 - **Nessun login per la pagina web.** Chiunque raggiunga la porta può convertire file e, se conosce l'identificativo di un lavoro (128 bit casuali), scaricarne il risultato. Per questo:
   - di base il servizio risponde solo su `127.0.0.1`;
@@ -772,7 +796,9 @@ Per far riconvertire un file basta cancellare la sua voce da `state.json`, oppur
 - **Archivi.** L'estrazione usa libarchive, che rifiuta i percorsi assoluti e quelli con `../`; nelle conversioni in blocco i collegamenti simbolici vengono ignorati e i file sono al massimo 2.000.
 - **Pagine web.** Le immagini di un articolo vengono scaricate con gli stessi controlli di `POST /api/fetch` (niente rete locale, connessione all'IP controllato, limiti di numero e dimensione); script, stili e gestori di eventi della pagina vengono tolti.
 - **Trascrizione.** L'audio va solo al servizio indicato in `WHISPER_URL`, scelto dall'amministratore; senza quella variabile non esce nulla.
-- **Pandoc.** Le risorse esterne (immagini incluse nei documenti) vengono cercate solo nella cartella del lavoro.
+- **Pandoc.** Le risorse esterne (immagini incluse nei documenti) vengono cercate solo nella cartella del lavoro, e Pandoc non può andare in rete: le immagini remote di un Markdown o di un HTML caricato non vengono scaricate (resta il testo alternativo), così un file non può far chiamare al server indirizzi della rete locale.
+- **Email e diagrammi.** Le immagini esterne delle email non vengono caricate; script, moduli e stili con risorse esterne vengono tolti. Graphviz gira con `GV_FILE_PATH` limitato alla cartella del lavoro, quindi un grafo non può includere file del server.
+- **Memoria.** I convertitori scritti in Python hanno un limite di memoria (`TOOL_MEMORY_GB`), oltre al tempo massimo e alla dimensione massima dei file.
 
 # Manutenzione
 
@@ -832,6 +858,7 @@ server/
     tools.py        i convertitori, uno per programma
     pageimages.py   PDF -> Word/PowerPoint con le pagine come immagini (impaginazione «identica»)
     pdftables.py    tabelle di un PDF in CSV, XLSX o JSON (PyMuPDF)
+    emailconv.py    email EML e MSG in HTML leggibile, o i loro allegati in uno ZIP
     webpage.py      pagina web -> articolo pulito con le immagini incorporate
     transcribe.py   trascrizione con un servizio Whisper compatibile con OpenAI
     pdftools.py     strumenti PDF (unire, dividere, ruotare, comprimere, OCR...) e loro opzioni
@@ -894,7 +921,10 @@ I test non richiedono i programmi di conversione. Coprono:
 - l'API completa (caricamento, conversione in due passaggi, download, errori, limiti, cancellazione, pulizia), con convertitori finti;
 - intervalli di pagine, opzioni degli strumenti PDF, API dei PDF e permessi delle chiavi; se sono installati `qpdf`, Poppler, Ghostscript e OCRmyPDF, anche gli strumenti PDF veri (altrimenti quei test vengono saltati).
 
-GitHub Actions lancia i test a ogni push e pull request (`.github/workflows/tests.yml`), con i programmi PDF installati. Per le conversioni vere c'è `selftest.py` dentro il container; il workflow delle release (`.github/workflows/docker.yml`) lo esegue sulla nuova immagine prima di pubblicarla.
+- la **pagina web in un browser vero** (`tests/test_ui.py`, con Playwright: `pip install -e ".[test,ui]"` e `python -m playwright install chromium`; in locale si può usare Chrome con `UI_BROWSER_CHANNEL=chrome`): schede, file e cartelle, menu, opzioni, conversione, *Scarica tutti*, inglese, nessun errore nella console;
+- la **trascrizione con un Whisper vero** (`tests/test_whisper_live.py`), solo con `WHISPER_TEST_URL` impostato.
+
+GitHub Actions lancia i test a ogni push e pull request (`.github/workflows/tests.yml`), con i programmi PDF, libarchive, FFmpeg e Graphviz installati; due job a parte provano la pagina in Chromium e una trascrizione vera con speaches e il modello `tiny`. Per le conversioni vere c'è `selftest.py` dentro il container; il workflow delle release (`.github/workflows/docker.yml`) lo esegue sulla nuova immagine prima di pubblicarla.
 
 # Problemi noti
 
@@ -902,7 +932,8 @@ GitHub Actions lancia i test a ogni push e pull request (`.github/workflows/test
 |---|---|
 | LibreOffice 25.2 entra in un ciclo infinito quando esporta in **TXT** un documento con una **tabella**, e continua a scrivere un file temporaneo (oltre 2,7 GB in due minuti). | DOCX/ODT → TXT passa da Pandoc; gli altri formati di testo passano da DOCX. In più, `MAX_OUTPUT_GB` ferma qualsiasi programma che scriva file enormi. |
 | Raramente LibreOffice resta bloccato all'avvio. | Dopo 10 minuti il processo viene terminato e la conversione ritentata con un profilo pulito. |
-| pdf2docx funziona bene sui PDF "veri" (con testo selezionabile), male sulle scansioni. | Prima passa la scansione nello strumento **OCR PDF**, poi converti il risultato in Word. |
+| pdf2docx funziona bene sui PDF "veri" (con testo selezionabile), male sulle scansioni. | Dalla 2.6 le scansioni passano da sole dall'**OCR** prima della conversione (`AUTO_OCR`). |
+| Chrome manda `Origin: null` quando una pagina con `Referrer-Policy: no-referrer` invia un modulo, e fino alla 2.5 *Scarica tutti* veniva rifiutato come richiesta da un altro sito (`403`). | Il server accetta le richieste che il browser dichiara `Sec-Fetch-Site: same-origin` (2.6). |
 | Le **slide** in PDF (PowerPoint, Keynote, Beamer…) diventano Word con testo che esce dalle caselle, titoli tagliati e pagine in più: pdf2docx ricostruisce ogni slide con caselle di misura fissa, e basta un carattere un po' più largo per spostare tutto. | Il Convertitore riconosce le slide (programma che ha creato il PDF, pagine in 4:3, 16:9 o 16:10) e lo dice nella nota del risultato. Per modificarle conviene **PDF → PowerPoint**; per un Word identico all'originale c'è *Impaginazione: identica*. |
 | JPEG XL non è supportato dall'ImageMagick di Debian 13. | Il formato non compare tra quelli disponibili. |
 | Video → GIF: solo i primi 60 secondi. | Scelta voluta, per evitare GIF di centinaia di MB. |

@@ -17,6 +17,10 @@ class ConvError(Exception):
 # Dimensione massima di ogni file scritto dai programmi esterni (0 = nessun limite). Protegge il disco da un
 # convertitore che entra in un ciclo infinito: oltre il limite il kernel lo ferma con SIGXFSZ.
 FILE_SIZE_LIMIT = 0
+# Memoria massima (spazio di indirizzi) per i convertitori scritti in Python (pdf2docx, PyMuPDF...): un PDF fatto
+# apposta non deve poter occupare tutta la RAM del server. Non vale per LibreOffice e FFmpeg, che riservano molta
+# memoria virtuale senza usarla.
+MEMORY_LIMIT = 0
 _PRLIMIT = shutil.which("prlimit")
 
 
@@ -25,14 +29,22 @@ def set_file_size_limit(limit: int) -> None:
     FILE_SIZE_LIMIT = max(0, int(limit))
 
 
+def set_memory_limit(limit: int) -> None:
+    global MEMORY_LIMIT
+    MEMORY_LIMIT = max(0, int(limit))
+
+
 async def run(cmd: list[str], *, timeout: int = 1800, cwd: Path | None = None,
-              on_line: Callable[[str], None] | None = None, env: dict | None = None) -> str:
+              on_line: Callable[[str], None] | None = None, env: dict | None = None,
+              limit_memory: bool = False) -> str:
     """Esegue un comando senza shell e ne restituisce le ultime righe di output.
 
     Solleva ConvError se il comando fallisce o supera il tempo; in quel caso termina anche i processi figli.
     """
     name = Path(cmd[0]).name
-    full = [_PRLIMIT, f"--fsize={FILE_SIZE_LIMIT}", "--", *cmd] if FILE_SIZE_LIMIT and _PRLIMIT else cmd
+    limits = ([f"--fsize={FILE_SIZE_LIMIT}"] if FILE_SIZE_LIMIT else []) \
+        + ([f"--as={MEMORY_LIMIT}"] if limit_memory and MEMORY_LIMIT else [])
+    full = [_PRLIMIT, *limits, "--", *cmd] if limits and _PRLIMIT else cmd
     proc = await asyncio.create_subprocess_exec(
         *full, cwd=cwd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
         env={**os.environ, **(env or {})}, start_new_session=True)
@@ -63,6 +75,8 @@ async def run(cmd: list[str], *, timeout: int = 1800, cwd: Path | None = None,
         raise ConvError(f"{name} ha superato la dimensione massima di un file ({gb:g} GB)")
     if proc.returncode != 0:
         msg = "\n".join(line for line in tail if line.strip())[-600:]
+        if limit_memory and MEMORY_LIMIT and ("MemoryError" in msg or "std::bad_alloc" in msg or proc.returncode == -9):
+            raise ConvError(f"{name} ha superato la memoria massima ({MEMORY_LIMIT / 1024**3:g} GB)")
         raise ConvError(f"{name} ha restituito {proc.returncode}: {msg}")
     return "\n".join(tail)
 

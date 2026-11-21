@@ -39,13 +39,13 @@ from fastapi import Body, FastAPI, File, Form, Request, Security, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from starlette.background import BackgroundTask
 
-from . import __version__, apikeys, i18n, options, pdftools, webhooks
+from . import __version__, apikeys, i18n, options, pdftools, tools, webhooks
 from .config import Settings
-from .formats import ext_of, normalize, safe_filename
+from .formats import ext_of, is_graphviz, normalize, safe_filename
 from .graph import Graph, default_graph
 from .jobs import JobError, JobManager
 from .transcribe import Transcriber
-from .runner import set_file_size_limit
+from .runner import set_file_size_limit, set_memory_limit
 
 STATIC = Path(__file__).parent / "static"
 STATIC_FILES = {"i18n.js": "text/javascript", "icon.svg": "image/svg+xml", "icon-192.png": "image/png",
@@ -117,8 +117,13 @@ def cross_site(request: Request) -> bool:
     """Vero per le richieste che modificano qualcosa inviate dal browser da una pagina di un altro sito."""
     if request.method in ("GET", "HEAD", "OPTIONS"):
         return False
-    if request.headers.get("sec-fetch-site") == "cross-site":
+    site = request.headers.get("sec-fetch-site")
+    if site == "cross-site":
         return True
+    if site == "same-origin":
+        # lo dice il browser (una pagina non puo' cambiarlo): con Referrer-Policy no-referrer Chrome manda
+        # "Origin: null" anche per i moduli della stessa pagina, come "Scarica tutti"
+        return False
     origin = request.headers.get("origin")
     if not origin or origin == "null":
         return origin == "null"
@@ -138,8 +143,11 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
     graph = graph or default_graph(settings.disabled, transcriber)
     pdf_tools = pdftools.available_tools() if pdf_tools is None else pdf_tools
     manager = JobManager(settings, graph)
+    manager.pdf_tools = pdf_tools
     keys = apikeys.KeyStore(settings.keys_dir, settings.admin_password, settings.require_key, settings.admin_login)
     set_file_size_limit(settings.max_output_bytes)
+    set_memory_limit(settings.tool_memory_bytes)
+    tools.configure(settings.auto_ocr, settings.ocr_lang)
     csp_page = ("default-src 'self'; script-src 'self' " + _inline_hashes("index.html", "admin.html", "docs-it.html", "docs-en.html") +
                 "; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; "
                 "base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
@@ -333,15 +341,23 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
     @app.post("/api/jobs", status_code=201, **api)
     async def create_job(request: Request, file: UploadFile | None = File(None), target: str = Form(...),
                          meta: str = Form(""), callback_url: str = Form(""), options: str = Form(""),
-                         staged: str = Form("")):
+                         staged: str = Form(""), subtitles: UploadFile | None = File(None)):
         """Crea un lavoro caricando un file (`file`) oppure con un file scaricato da `POST /api/fetch` (`staged`),
         e indicando il formato di destinazione. `options` (JSON, facoltativo): opzioni di conversione, vedi
         `GET /api/options/{src}/{dst}`. Con `callback_url` il server chiama quell'indirizzo (POST, JSON) quando
-        il lavoro finisce. Permesso: `convert`."""
+        il lavoro finisce. `subtitles` (facoltativo): file SRT, VTT o ASS da aggiungere a un video (come traccia,
+        o impresso con l'opzione `burn_subtitles`). Permesso: `convert`."""
         if not file and not staged:
             raise JobError(400, "Manca il file")
-        job = await manager.create(None if staged else file, file.filename if file else None, target, meta,
-                                   opts=options, staged=staged, **job_args(request, callback_url))
+        name = file.filename if file else None
+        if file and name and name.lower().endswith(".dot"):  # .dot: modello di Word o grafo di Graphviz?
+            head = await file.read(1024)
+            await file.seek(0)
+            if is_graphviz(head):
+                name = name[:-4] + ".gv"
+        job = await manager.create(None if staged else file, name, target, meta,
+                                   opts=options, staged=staged, **job_args(request, callback_url),
+                                   subtitles=(subtitles, subtitles.filename) if subtitles and subtitles.filename else None)
         return public(request, job)
 
     @app.get("/api/pdf", **api)

@@ -46,6 +46,10 @@ class Settings:
     whisper_url: str = ""           # servizio di trascrizione compatibile con OpenAI (vuoto = niente trascrizioni)
     whisper_model: str = ""         # modello chiesto al servizio (es. Systran/faster-whisper-small)
     whisper_api_key: str = ""       # chiave per il servizio, se la chiede
+    tool_memory_bytes: int = 3 * 1024**3  # memoria massima dei convertitori in Python (pdf2docx, PyMuPDF...)
+    auto_ocr: bool = True           # OCR automatico delle scansioni prima di PDF -> Word, Excel, testo
+    ocr_lang: str = "ita+eng"       # lingue di Tesseract per l'OCR automatico
+    keep_jobs: bool = True          # i lavori (in coda e finiti) sopravvivono al riavvio del servizio
 
     @property
     def jobs_dir(self) -> Path:
@@ -88,4 +92,8 @@ class Settings:
             whisper_url=env.get("WHISPER_URL", "").strip(),
             whisper_model=env.get("WHISPER_MODEL", "Systran/faster-whisper-small").strip(),
             whisper_api_key=env.get("WHISPER_API_KEY", ""),
+            tool_memory_bytes=int(float(env.get("TOOL_MEMORY_GB", "3")) * 1024**3),
+            auto_ocr=truthy(env.get("AUTO_OCR", "true")),
+            ocr_lang=env.get("OCR_LANG", "ita+eng").strip() or "ita+eng",
+            keep_jobs=truthy(env.get("KEEP_JOBS", "true")),
         )

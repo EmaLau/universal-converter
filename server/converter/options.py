@@ -52,6 +52,8 @@ DEFS: dict[str, dict] = {
             "choices": [["", "150 DPI (predefinita)"], ["72", "72 DPI (schermo)"], ["300", "300 DPI (stampa)"]]},
     "pages": {"type": "text", "label": "Pagine (es. 2 oppure 3-5)", "placeholder": "tutte"},
     "strip": {"type": "bool", "label": "Togli i metadati (data, posizione GPS, fotocamera)"},
+    "subtitles": {"type": "file", "label": "Sottotitoli da aggiungere (SRT, VTT, ASS)", "accept": ".srt,.vtt,.ass,.ssa"},
+    "burn_subtitles": {"type": "bool", "label": "Sottotitoli impressi nel video (sempre visibili)"},
     "language": {"type": "select", "label": "Lingua del parlato",
                  "choices": [["", "Riconoscimento automatico"], ["it", "Italiano"], ["en", "Inglese"],
                              ["fr", "Francese"], ["de", "Tedesco"], ["es", "Spagnolo"], ["pt", "Portoghese"],
@@ -75,6 +77,8 @@ def applicable(plan: list[Edge] | None, target: str) -> list[str]:
         out = ["start", "end"]
         if category(target) == "Video" or target == "gif":
             out.append("height")
+            if target != "gif":
+                out += ["subtitles", "burn_subtitles"]
             if target in CRF_VIDEO:
                 out.append("video_quality")
             if target not in NO_AUDIO:
@@ -130,6 +134,8 @@ def parse(raw: str | dict | None, plan: list[Edge] | None, target: str) -> dict:
             continue
         if name not in DEFS:
             raise OptionError(f"opzione sconosciuta: {name}")
+        if DEFS[name]["type"] == "file":
+            raise OptionError(f"'{name}' va mandato come file, non dentro options")
         if name not in allowed:
             raise OptionError(f"opzione non disponibile per questa conversione: {name}")
         d = DEFS[name]
@@ -190,7 +196,8 @@ def ffmpeg_input_args(opts: dict) -> list[str]:
 
 def reencode_needed(opts: dict) -> bool:
     """Con queste opzioni la copia senza ricodifica non basta."""
-    return any(opts.get(k) for k in ("start", "end", "height", "video_quality", "audio_bitrate", "mono"))
+    return any(opts.get(k) for k in ("start", "end", "height", "video_quality", "audio_bitrate", "mono",
+                                       "burn_subtitles"))
 
 
 def ffmpeg_output_args(args: list[str], opts: dict, out_ext: str) -> list[str]:

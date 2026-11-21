@@ -238,7 +238,9 @@ def test_transcription_in_graph():
     assert g.plan("mp3", "docx") is None
     assert options.applicable(g.plan("mov", "vtt"), "vtt") == ["language"]
     assert options.parse({"language": "it"}, g.plan("mov", "vtt"), "vtt") == {"language": "it"}
-    assert default_graph().plan("mp4", "srt") is None  # senza WHISPER_URL niente trascrizioni
+    assert tools_of(default_graph().plan("mp4", "srt")) == [("FFmpeg", "mp4", "srt")]  # solo la traccia del video
+    assert default_graph().plan("mp3", "srt") is None  # l'audio non ha tracce: serve Whisper
+    assert tools_of(default_graph().plan("mp4", "txt")) == [("FFmpeg", "mp4", "txt")]
     assert "Whisper" in g.payload()["tools"] and "srt" in g.payload()["inputs"]["mp4"]
     with pytest.raises(ValueError):
         Transcriber("ftp://x")

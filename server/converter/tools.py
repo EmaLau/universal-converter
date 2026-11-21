@@ -29,6 +29,26 @@ def opts_of(job, out_ext: str) -> dict:
     o = getattr(job, "options", None) or {}
     return o if o and out_ext == getattr(job, "target", out_ext) else {}
 
+
+def is_final(job, out_ext: str) -> bool:
+    """Questo passaggio crea il risultato (e non un file intermedio di una catena)?"""
+    return out_ext == getattr(job, "target", out_ext)
+
+
+def add_note(job, text: str) -> None:
+    """Aggiunge una nota al risultato; piu' note sono separate da "; " (e tradotte una per una)."""
+    job.note = f"{job.note}; {text}" if getattr(job, "note", "") else text
+
+
+# impostazioni lette all'avvio (app.create_app -> configure)
+AUTO_OCR = True
+OCR_LANG = "ita+eng"
+
+
+def configure(auto_ocr: bool = True, ocr_lang: str = "ita+eng") -> None:
+    global AUTO_OCR, OCR_LANG
+    AUTO_OCR, OCR_LANG = auto_ocr, ocr_lang
+
 # ------------------------------------------------------------------------------------------- LibreOffice
 LO_FILTERS = {
     "pdf": "pdf", "docx": "docx:MS Word 2007 XML", "odt": "odt", "rtf": "rtf", "doc": "doc:MS Word 97",
@@ -62,6 +82,10 @@ async def libreoffice(job: Job, inp: Path, out_ext: str, wd: Path, infilter: str
             sample = fh.read(65536).decode("utf-8", "replace")
         cmd.append(f"--infilter=CSV:{csv_separator(sample, src)},34,76,1")
     lo_filter, produced = LO_FILTERS_BY_KIND.get((category(src), out_ext), (LO_FILTERS.get(out_ext), out_ext))
+    all_sheets = category(src) == "Foglio di calcolo" and produced == "csv" and is_final(job, out_ext) \
+        and src not in ("csv", "tsv")
+    if all_sheets:  # risultato finale in CSV: tutti i fogli, uno per file (in uno ZIP se sono piu' di uno)
+        lo_filter += ",,0,false,true,false,false,false,-1"
     cmd += ["--convert-to", lo_filter, "--outdir", str(wd), str(inp)]
     try:
         for attempt in (1, 2):  # di rado soffice resta appeso all'avvio: riprova con un profilo pulito
@@ -76,6 +100,16 @@ async def libreoffice(job: Job, inp: Path, out_ext: str, wd: Path, infilter: str
     finally:
         shutil.rmtree(profile, ignore_errors=True)
     out = wd / f"{inp.stem}.{produced}"
+    if all_sheets and not out.exists():
+        sheets = sorted(wd.glob(f"{inp.stem}-*.csv"))
+        if len(sheets) == 1:
+            out = sheets[0].rename(out)
+        elif sheets:
+            renamed = []
+            for f in sheets:  # "input-Foglio1.csv" -> "Foglio1.csv"
+                renamed.append(f.rename(wd / f"{f.name[len(inp.stem) + 1:]}"))
+            add_note(job, f"{len(sheets)} fogli, un CSV per foglio")
+            return zip_many(renamed, wd / "out.zip")
     if not out.exists():
         raise ConvError("LibreOffice non ha prodotto il file (formato non riconosciuto o file danneggiato)")
     return out
@@ -111,7 +145,7 @@ async def looks_like_slides(inp: Path) -> bool:
 async def pdf_pages_as_images(inp: Path, out: Path, kind: str) -> Path:
     """Impaginazione «Identica»: ogni pagina diventa un'immagine in Word o PowerPoint (vedi pageimages.py)."""
     script = Path(__file__).with_name("pageimages.py")
-    await run(["python3", str(script), kind, str(inp), str(out)], timeout=1800)
+    await run(["python3", str(script), kind, str(inp), str(out)], timeout=1800, limit_memory=True)
     return out
 
 
@@ -119,12 +153,78 @@ async def pdf_to_docx(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
     out = wd / "out.docx"
     if opts_of(job, out_ext).get("layout") == "exact":
         return await pdf_pages_as_images(inp, out, "docx")
+    inp = await ocr_if_scan(job, inp, wd)
     code = ("import sys,logging;logging.disable(logging.WARNING);from pdf2docx import Converter;"
             "c=Converter(sys.argv[1]);c.convert(sys.argv[2]);c.close()")
-    await run(["python3", "-c", code, str(inp), str(out)], timeout=1800)
+    await run(["python3", "-c", code, str(inp), str(out)], timeout=1800, limit_memory=True)
     if await looks_like_slides(inp):  # pdf2docx ricostruisce male le slide: suggerisce le alternative
-        job.note = SLIDES_NOTE
+        add_note(job, SLIDES_NOTE)
+    elif is_final(job, out_ext):
+        await check_pages(job, inp, out, wd)
     return out
+
+
+# ---------------------------------------------------------------- scansioni e controllo del risultato
+OCR_NOTE = "era una scansione: testo riconosciuto con l'OCR"
+
+
+async def is_scan(inp: Path) -> bool:
+    """PDF senza testo selezionabile nelle prime pagine (meno di 20 caratteri per pagina)."""
+    try:
+        pages = min(5, await pdf_page_count(inp))
+        text = await run(["pdftotext", "-l", str(pages), "-enc", "UTF-8", str(inp), "-"], timeout=120)
+    except ConvError:
+        return False
+    return len(re.sub(r"\s", "", text)) < 20 * pages
+
+
+async def ocr_if_scan(job: Job, inp: Path, wd: Path) -> Path:
+    """OCR automatico (AUTO_OCR) prima di PDF -> Word, Excel o testo: senza, il risultato sarebbe vuoto."""
+    if not AUTO_OCR or not shutil.which("ocrmypdf") or not await is_scan(inp):
+        return inp
+    out = wd / "ocr.pdf"
+    job.step = f"OCR della scansione ({OCR_LANG})"
+    try:
+        await run(["ocrmypdf", "-q", "-l", OCR_LANG, "--skip-text", "--rotate-pages", "--jobs", "2",
+                   "--output-type", "pdf", str(inp), str(out)], timeout=4 * 3600)
+    except ConvError:
+        return inp  # meglio un risultato senza OCR che nessun risultato
+    add_note(job, OCR_NOTE)
+    return out
+
+
+def docx_saved_pages(path: Path) -> int:
+    """Pagine indicate da Word in docProps/app.xml (0 se mancano: per esempio file non salvati da Word)."""
+    import zipfile
+    try:
+        with zipfile.ZipFile(path) as z:
+            m = re.search(rb"<Pages>(\d+)</Pages>", z.read("docProps/app.xml"))
+    except (OSError, KeyError, zipfile.BadZipFile):
+        return 0
+    return int(m.group(1)) if m else 0
+
+
+def pages_differ(expected: int, got: int) -> bool:
+    return expected > 0 and got > 0 and abs(got - expected) >= max(2, round(expected * 0.25))
+
+
+async def check_pages(job: Job, pdf: Path, docx: Path, wd: Path) -> None:
+    """PDF -> Word: impagina il Word con LibreOffice e avvisa se le pagine cambiano molto (testo che esce dalle
+    caselle, caratteri sostituiti). Solo un controllo: se non riesce, il risultato resta valido."""
+    check = wd / "check"
+    check.mkdir(exist_ok=True)
+    try:
+        expected = await pdf_page_count(pdf)
+        shutil.copy(docx, check / "check.docx")
+        rendered = await libreoffice(job, check / "check.docx", "pdf", check)
+        got = await pdf_page_count(rendered)
+    except (ConvError, OSError):
+        return
+    finally:
+        job.step = ""
+    if pages_differ(expected, got):
+        add_note(job, f"il PDF ha {expected} pagine, il Word se ne impagina {got}: prova Impaginazione «Identica»")
+    shutil.rmtree(check, ignore_errors=True)
 
 
 NO_TABLES = "nessuna tabella trovata nel PDF (se è una scansione, prima usa OCR PDF)"
@@ -135,7 +235,8 @@ async def pdf_tables(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
     out = wd / f"out.{out_ext}"
     script = Path(__file__).with_name("pdftables.py")
     try:
-        msg = await run(["python3", str(script), out_ext, str(inp), str(out)], timeout=1800)
+        inp = await ocr_if_scan(job, inp, wd)
+        msg = await run(["python3", str(script), out_ext, str(inp), str(out)], timeout=1800, limit_memory=True)
     except ConvError as e:
         if "restituito 3" in str(e):
             raise ConvError(NO_TABLES) from None
@@ -145,7 +246,7 @@ async def pdf_tables(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
     m = re.search(r"(\d+) tabelle", msg or "")
     if m:
         n = int(m.group(1))
-        job.note = "1 tabella trovata" if n == 1 else f"{n} tabelle trovate"
+        add_note(job, "1 tabella trovata" if n == 1 else f"{n} tabelle trovate")
     return out
 
 
@@ -158,6 +259,7 @@ async def pdf_to_pptx(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
 
 async def pdf_to_text(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
     out = wd / "out.txt"
+    inp = await ocr_if_scan(job, inp, wd)
     await run(["pdftotext", "-layout", "-enc", "UTF-8", str(inp), str(out)], timeout=600)
     return out
 
@@ -349,8 +451,12 @@ async def ffmpeg(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
         if m and duration > 0:
             job.progress = min(0.99, int(m.group(1)) / 1e6 / duration)
 
+    attempts = ffmpeg_attempts(out_ext, vcodec, acodec, o)
+    subs = (getattr(job, "extras", None) or {}).get("subtitles") if is_final(job, out_ext) else None
+    if subs and out_ext not in AUDIO_ARGS and out_ext != "gif":
+        attempts, base = with_subtitles(attempts, base, Path(subs), out_ext, bool(o.get("burn_subtitles")), job)
     err: ConvError | None = None
-    for args in ffmpeg_attempts(out_ext, vcodec, acodec, o):
+    for args in attempts:
         try:
             await run(base + args + ["-progress", "pipe:1", "-nostats", str(out)], timeout=4 * 3600,
                       on_line=on_line)
@@ -359,6 +465,111 @@ async def ffmpeg(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
             err = e
             out.unlink(missing_ok=True)
     raise err or ConvError("ffmpeg non riuscito")
+
+
+TEXT_SUBS = {"subrip", "ass", "ssa", "mov_text", "webvtt", "text"}
+
+
+async def subtitle_tracks(inp: Path) -> list[tuple[int, str]]:
+    """Tracce di sottotitoli testuali del video: (posizione tra i sottotitoli, lingua)."""
+    try:
+        out = await run(["ffprobe", "-v", "error", "-select_streams", "s", "-show_entries",
+                         "stream=codec_name:stream_tags=language", "-of", "json", str(inp)], timeout=60)
+        streams = json.loads(out[out.index("{"):]).get("streams", [])
+    except (ConvError, ValueError):
+        return []
+    return [(i, (st.get("tags") or {}).get("language", "")) for i, st in enumerate(streams)
+            if st.get("codec_name") in TEXT_SUBS]
+
+
+def srt_to_text(srt: str) -> str:
+    """Solo le battute di un SRT, senza numeri e orari."""
+    lines = [ln.strip() for ln in srt.splitlines()]
+    keep = [ln for ln in lines if ln and not ln.isdigit() and "-->" not in ln]
+    return "\n".join(re.sub(r"<[^>]+>|\{[^}]*\}", "", ln) for ln in keep) + "\n"
+
+
+def video_subtitles(transcriber=None):
+    """Video -> SRT/VTT/TXT: la traccia di sottotitoli contenuta nel video (FFmpeg) e, se non c'e', la
+    trascrizione con Whisper (quando WHISPER_URL e' impostato)."""
+    async def convert(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
+        tracks = await subtitle_tracks(inp)
+        if not tracks:
+            if transcriber is None:
+                raise ConvError("il video non ha sottotitoli testuali; per trascrivere il parlato serve il servizio "
+                                "Whisper (WHISPER_URL)")
+            return await transcriber(job, inp, out_ext, wd)
+        index, lang = tracks[0]
+        srt = wd / "subs.srt"
+        await run(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", str(inp), "-map", f"0:s:{index}",
+                   "-c:s", "srt", str(srt)], timeout=600)
+        out = wd / f"out.{out_ext}"
+        if out_ext == "txt":
+            out.write_text(srt_to_text(srt.read_text(encoding="utf-8", errors="replace")), encoding="utf-8")
+        elif out_ext == "srt":
+            srt.rename(out)
+        else:
+            await run(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", str(srt), str(out)], timeout=300)
+        add_note(job, "sottotitoli presi dal video" + (f" ({lang})" if lang else "")
+                 + (f" [1/{len(tracks)}]" if len(tracks) > 1 else ""))
+        return out
+    convert.__name__ = "video_subtitles"
+    return convert
+
+
+async def graphviz(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
+    """Diagrammi Graphviz (DOT) in SVG, PNG o PDF. GV_FILE_PATH limita le immagini incluse alla cartella del lavoro."""
+    out = wd / f"out.{out_ext}"
+    await run(["dot", f"-T{out_ext}", "-o", str(out), str(inp)], timeout=300, limit_memory=True,
+              env={"GV_FILE_PATH": str(wd), "SERVER_NAME": "converter"})
+    return out
+
+
+SUB_CODEC = {"mp4": "mov_text", "mov": "mov_text", "m4v": "mov_text", "mkv": "srt", "webm": "webvtt"}
+
+
+def with_subtitles(attempts: list[list[str]], base: list[str], subs: Path, out_ext: str, burn: bool,
+                   job=None) -> tuple[list[list[str]], list[str]]:
+    """Aggiunge un file di sottotitoli al video: come traccia (si accende e spegne nel lettore) oppure impressi
+    nell'immagine (sempre visibili, serve ricodificare). I contenitori senza tracce di sottotitoli li imprimono."""
+    if burn or out_ext not in SUB_CODEC:
+        if job is not None and not burn:
+            add_note(job, f"sottotitoli impressi nel video: il formato {out_ext.upper()} non ha tracce di sottotitoli")
+        flt = f"subtitles=filename='{subs}'"
+        out = []
+        for args in attempts:
+            if "-c" in args and "copy" in args:  # la copia senza ricodifica non puo' disegnare i sottotitoli
+                continue
+            args = list(args)
+            if "-vf" in args:
+                args[args.index("-vf") + 1] += "," + flt
+            else:
+                args += ["-vf", flt]
+            out.append(args)
+        return out, base
+    codec = "ass" if out_ext == "mkv" and subs.suffix.lower() in (".ass", ".ssa") else SUB_CODEC[out_ext]
+    out = []
+    for args in attempts:
+        maps = [] if "-map" in args else ["-map", "0:v?", "-map", "0:a?"]
+        out.append([*maps, *args, "-map", "1:0", "-c:s", codec])
+    at = base.index("-i") + 2  # subito dopo il video: le opzioni che seguono valgono per il file d'uscita
+    return out, [*base[:at], "-i", str(subs), *base[at:]]
+
+
+async def email(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
+    """EML/MSG -> HTML leggibile (poi PDF, Word...) oppure -> ZIP con gli allegati (vedi emailconv.py)."""
+    out = wd / f"out.{out_ext}"
+    script = Path(__file__).with_name("emailconv.py")
+    try:
+        await run(["python3", str(script), "zip" if out_ext == "zip" else "html", str(inp), str(out),
+                   getattr(job, "lang", "it") or "it"], timeout=600, limit_memory=True)
+    except ConvError as e:
+        if "restituito 3" in str(e):
+            raise ConvError("nessun allegato nell'email") from None
+        if "restituito 4" in str(e):
+            raise ConvError("email danneggiata o non leggibile") from None
+        raise
+    return out
 
 
 async def subtitles(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
@@ -389,6 +600,11 @@ PANDOC_WRITE = {"md": "markdown", "html": "html", "docx": "docx", "odt": "odt", 
                 "pptx": "pptx"}
 
 
+# Pandoc scarica da solo le immagini remote (![](http://...)) quando crea DOCX, ODT o EPUB: da un file caricato
+# si potrebbero far chiamare al server indirizzi della rete locale. Un proxy inesistente blocca ogni richiesta;
+# Pandoc avvisa e mette il testo alternativo. Le pagine web passano da POST /api/fetch, con i suoi controlli.
+NO_NETWORK = {k: "http://127.0.0.1:9" for k in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy")}
+NO_NETWORK |= {"no_proxy": "", "NO_PROXY": ""}
 PANDOC_BINARY = {"docx", "odt", "epub", "pptx", "html"}  # qui le immagini restano incorporate
 
 
@@ -404,7 +620,7 @@ async def pandoc(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
             inp = wd / "article.html"
             inp.write_text(restore_image_urls(text), encoding="utf-8")
     await run(["pandoc", "-s", f"--resource-path={inp.parent}", "-f", PANDOC_READ[ext_of(inp.name)],
-               "-t", PANDOC_WRITE[out_ext], "-o", str(out), str(inp)], timeout=600)
+               "-t", PANDOC_WRITE[out_ext], "-o", str(out), str(inp)], timeout=600, env=NO_NETWORK)
     return out
 
 

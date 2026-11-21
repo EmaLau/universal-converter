@@ -226,6 +226,8 @@ const TOOLS = [
   ["Xournal++ in PDF","Appunti .xopp","xopp","pdf"],
   ["PDF in SVG","Pagine vettoriali","pdf","svg"],
   ["Tabelle PDF in Excel","Ogni tabella in un foglio","pdf","xlsx"],
+  ["Email in PDF","EML e MSG di Outlook","eml msg","pdf"],
+  ["Diagrammi in SVG","Graphviz (DOT, GV)","gv","svg"],
   ["Video in sottotitoli","Trascrizione SRT con Whisper","@Video","srt"],
   ["Audio in testo","Trascrizione con Whisper","@Audio","txt"],
   ["Markdown in PowerPoint","Una slide per titolo","md","pptx"],
@@ -347,7 +349,20 @@ async function filesFromDrop(dt){
 }
 const dirOf=f=>f._dir || (f.webkitRelativePath||"").split("/").slice(0,-1).join("/");
 
+// .dot: modello di Word o grafo di Graphviz? I grafi diventano .gv (come fa anche il server)
+async function fixDot(list){
+  return Promise.all([...list].map(async f=>{
+    if(!/\.dot$/i.test(f.name)) return f;
+    const head=(await f.slice(0,512).text().catch(()=>"")).replace(/^\uFEFF/,"").trimStart().toLowerCase();
+    if(head.includes("\u0000") || !/^(digraph|graph|strict|\/\*|\/\/)/.test(head)) return f;
+    const g=new File([f], f.name.replace(/\.dot$/i,".gv"), {type:"text/vnd.graphviz"}); g._dir=f._dir||dirOf(f); return g;
+  }));
+}
 function addFiles(list){
+  if([...list].some(f=>/\.dot$/i.test(f.name))){ fixDot(list).then(addFilesNow); return; }
+  addFilesNow(list);
+}
+function addFilesNow(list){
   for(const f of list){
     const ext=extOf(f.name), targets=ptool ? [] : targetsOf(ext);
     if(ptool){ items.push({id:nextId++, file:f, ext, targets, target:null, state: ext==="pdf" ? (F.max_upload_bytes&&f.size>F.max_upload_bytes ? "error" : "ready") : "unsupported", fatal:!!(F.max_upload_bytes&&f.size>F.max_upload_bytes), error:`file troppo grande (massimo ${fmtSize(F.max_upload_bytes)})`}); continue; }
@@ -434,6 +449,7 @@ function start(it){
   const fd=new FormData(); fd.append("target",it.target);
   if(it.staged) fd.append("staged",it.staged); else fd.append("file",it.file,it.file.name);
   const o=chosenOptions(it); if(Object.keys(o).length) fd.append("options",JSON.stringify(o));
+  for(const n of it._optNames||[]) if(optDefs[n]?.type==="file" && optFiles[n]) fd.append(n, optFiles[n], optFiles[n].name);
   send(it, "api/jobs", fd);
 }
 function send(it, url, fd){
@@ -511,15 +527,17 @@ function renderHistory(){
 $("#rclear").onclick=()=>{ saveHistory([]); renderHistory(); };
 
 // ------------------------------------------------------------------ opzioni di conversione e preset
-const ORDER_OPTS=["quality","max_size","start","end","height","video_quality","audio_bitrate","mono","dpi","pages","layout","language","strip"];
+const ORDER_OPTS=["quality","max_size","start","end","height","video_quality","audio_bitrate","mono","dpi","pages","layout","language","subtitles","burn_subtitles","strip"];
 const optCache={}, optVals={};
 let optKey="", optDefs={};
 function optionsFor(src,dst){ const k=src+">"+dst;
+  if(isBatch(src,dst)) return Promise.resolve([]);  // conversioni in blocco: niente opzioni (e niente 404 in console)
   return optCache[k] ||= fetch(`api/options/${encodeURIComponent(src)}/${encodeURIComponent(dst)}`).then(r=>r.ok?r.json():{options:[]}).then(j=>{
     for(const d of j.options||[]) optDefs[d.name]=d; return (j.options||[]).map(d=>d.name); }).catch(()=>[]); }
+const optFiles={};  // opzioni di tipo "file" (sottotitoli da aggiungere): vanno nel form, non nel JSON delle opzioni
 function chosenOptions(it){
   const names=it._optNames||[], o={};
-  for(const n of names){ const v=optVals[n]; if(v!==undefined && v!=="" && v!==false) o[n]=v; }
+  for(const n of names){ if(optDefs[n]?.type==="file") continue; const v=optVals[n]; if(v!==undefined && v!=="" && v!==false) o[n]=v; }
   return o;
 }
 const BUILTIN=[
@@ -566,7 +584,7 @@ async function refreshOptions(){
     const name=el("input",{type:"text",placeholder:"Nome del preset",maxlength:"60","aria-label":"Nome del preset"});
     const save=()=>{ const nm=name.value.trim(); if(!nm) return name.focus();
       const same=ready.every(i=>i.target===ready[0].target);
-      const opts={}; for(const k of names){ const v=optVals[k]; if(v!==undefined&&v!==""&&v!==false) opts[k]=v; }
+      const opts={}; for(const k of names){ if(optDefs[k]?.type==="file") continue; const v=optVals[k]; if(v!==undefined&&v!==""&&v!==false) opts[k]=v; }
       const list=userPresets().filter(p=>p.name!==nm); list.push({name:nm, target:same?ready[0].target:"", options:opts}); saveUserPresets(list);
       savingPreset=false; presetSel="u"+(list.length-1); optKey=""; refreshOptions(); };
     name.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); save(); } if(e.key==="Escape"){ savingPreset=false; optKey=""; refreshOptions(); } });
@@ -586,6 +604,12 @@ async function refreshOptions(){
     const upd=v=>{ if(v===""||v===false) delete optVals[nm]; else optVals[nm]=v; };
     if(d.type==="select") box.append(el("label",{},d.label,el("select",{id,onchange:e=>upd(e.target.value)},d.choices.map(c=>el("option",{value:c[0],selected:String(val??"")===c[0]},c[1])))));
     else if(d.type==="bool") box.append(el("label",{class:"check"},el("input",{type:"checkbox",id,checked:!!val,onchange:e=>upd(e.target.checked)}),d.label));
+    else if(d.type==="file"){
+      const shown=el("span",{class:"fdir",translate:"no"},optFiles[nm]?optFiles[nm].name:"");
+      const inp=el("input",{type:"file",id,accept:d.accept||"",hidden:true,onchange:e=>{ optFiles[nm]=e.target.files[0]; shown.textContent=optFiles[nm]?optFiles[nm].name:""; clear.classList.toggle("hidden",!optFiles[nm]); }});
+      const clear=el("button",{class:"btn small ghost"+(optFiles[nm]?"":" hidden"),type:"button",onclick:()=>{ delete optFiles[nm]; inp.value=""; shown.textContent=""; clear.classList.add("hidden"); }},"Togli");
+      box.append(el("label",{},d.label,el("span",{},el("button",{class:"btn small ghost",type:"button",onclick:()=>inp.click()},"Scegli il file")," ",shown," ",clear),inp));
+    }
     else box.append(el("label",{},d.label,el("input",{type:"text",id,value:val??"",placeholder:d.placeholder||"",autocomplete:"off",
       inputmode:d.type==="int"?"numeric":d.type==="time"?"decimal":"text",oninput:e=>{ const v=e.target.value.trim(); upd(d.type==="int"&&/^\d+$/.test(v)?+v:v); }})));
   }

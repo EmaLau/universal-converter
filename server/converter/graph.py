@@ -51,7 +51,7 @@ def is_sensible(src: str, dst: str) -> bool:
         a in ("Foglio di calcolo", "Presentazione") and b == "Ebook",
         src == "xopp" and dst not in ("pdf", "jpg", "png"),
         a == "Archivio" and b != "Archivio",
-        b == "Archivio" and a != "Archivio",
+        b == "Archivio" and a != "Archivio" and src not in ("eml", "msg"),  # allegati delle email
         a == "Foglio di calcolo" and b == "Documento" and dst not in ("pdf", "html", "txt", "md"),
         a == "Foglio di calcolo" and b == "Presentazione",
         b == "Presentazione" and a == "Documento" and src not in ("md", "rst", "org", "html", "textile", "pdf"),
@@ -185,6 +185,8 @@ def default_graph(disabled: Iterable[tuple[str, str]] = (), transcriber: Convert
     g.add("md rst org html textile", "pptx", tools.pandoc, "Pandoc", source_only=True)  # slide dai titoli
     g.add("csv tsv", "md", tools.pandoc, "Pandoc")
     g.add("xopp", "pdf", tools.xournalpp, "Xournal++")
+    g.add("eml msg", "html zip", tools.email, "Python")  # email leggibili (poi PDF, Word...) o i loro allegati
+    g.add("gv", "svg png pdf", tools.graphviz, "Graphviz")
     # PDF e PostScript
     g.add("pdf", "docx", tools.pdf_to_docx, "pdf2docx", source_only=True)
     # slide modificabili (LibreOffice importa ogni pagina): solo da un PDF originale, come pdf2docx
@@ -207,8 +209,11 @@ def default_graph(disabled: Iterable[tuple[str, str]] = (), transcriber: Convert
     g.add(VIDEO, f"{VIDEO_OUT} gif {AUDIO_OUT}", tools.ffmpeg, "FFmpeg")
     g.add("gif apng", "mp4 webm", tools.ffmpeg, "FFmpeg")
     g.add(SUBTITLES, "srt vtt ass", tools.subtitles, "FFmpeg")
+    # sottotitoli dai video: la traccia contenuta nel video e, se manca, la trascrizione (se c'e' Whisper)
+    g.add(VIDEO, "srt vtt txt", tools.video_subtitles(transcriber),
+          "Whisper" if transcriber else "FFmpeg")
     if transcriber:  # servizio Whisper separato (WHISPER_URL): parlato -> testo e sottotitoli
-        g.add(f"{AUDIO} {VIDEO}", " ".join(TRANSCRIPTS), transcriber, "Whisper")
+        g.add(AUDIO, " ".join(TRANSCRIPTS), transcriber, "Whisper")
     # ebook
     g.add(EBOOK, EBOOK_OUT, tools.calibre, "Calibre", cost=1.2)
     g.add("pdf", "epub", tools.calibre, "Calibre", cost=1.2)

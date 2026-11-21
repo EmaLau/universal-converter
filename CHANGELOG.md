@@ -5,6 +5,44 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-11-21
+
+### Added
+- **Automatic OCR**: a PDF without selectable text (a scan) goes through OCRmyPDF before PDF → Word, PDF → Excel/CSV/JSON
+  and PDF → text, and the result note says so (`AUTO_OCR`, `OCR_LANG`).
+- **Substitute fonts**: free fonts with the same metrics or as close as possible for Gill Sans, Century Gothic, Garamond,
+  Palatino, Bookman, Century Schoolbook, Helvetica, Segoe UI, Tahoma, Verdana and more (`server/fonts.conf`, new
+  packages `fonts-urw-base35`, `fonts-adf-gillius`, `fonts-ebgaramond`, `fonts-open-sans`), and a **fonts folder**
+  (`FONTS_DIR`, `/work/fonts` by default) for your own fonts. The slide deck that turned a 9-page PDF into a 17-page
+  Word file now lays out on 12 pages.
+- **Result check** after PDF → Word: when the Word file lays out on many more or fewer pages than the PDF, the note
+  says so and suggests *Layout: identical*.
+- **Subtitles**: video → SRT/VTT/TXT takes the subtitle track inside the video (no Whisper needed; Whisper is used
+  when there is none); **add subtitles** to a video with the new `subtitles` file field of `POST /api/jobs` (*Subtitles
+  to add* on the web page), as a switchable track (MP4, MOV, MKV, WEBM) or burned in (`burn_subtitles`).
+- **One CSV per sheet**: workbooks with several sheets → CSV give a ZIP with one CSV per sheet.
+- **Email**: EML and Outlook MSG to a readable document (and from there PDF, Word, Markdown…) or to a ZIP with the
+  attachments; external images are not loaded. New *Email to PDF* tool.
+- **Graphviz** diagrams (`.gv`, and `.dot` files that contain a graph) to SVG, PNG, PDF. New *Diagrams to SVG* tool.
+- **Jobs survive a restart** (`KEEP_JOBS`, on by default): finished jobs stay downloadable until they expire, queued
+  or interrupted ones start again; a shutdown no longer marks running jobs as failed.
+- **Memory limit** for the converters written in Python (`TOOL_MEMORY_GB`, 3 GB by default).
+- Tests: the web page in a real browser with Playwright (cards, files and folders, menus, options, conversion,
+  *Download all*, English, no console errors), a live transcription with speaches and the `tiny` model, both as
+  GitHub Actions jobs; self-test cases for automatic OCR, sheets, Graphviz, email, subtitles and the font substitutes;
+  fuzz cases for email, Graphviz, subtitles and sheets.
+
+### Fixed
+- **Download all** on the web page was refused with `403` in Chrome: with `Referrer-Policy: no-referrer` Chrome sends
+  `Origin: null` for same-page form submissions. Requests the browser marks `Sec-Fetch-Site: same-origin` are accepted.
+- The web page no longer asks for options of batch conversions (a `404` in the browser console).
+
+### Security
+- **Pandoc no longer downloads remote resources**: an uploaded Markdown or HTML file with `![](http://192.168.…)` could
+  make the server call addresses of the local network while creating DOCX, ODT or EPUB. Remote images are replaced by
+  their alt text. Web pages keep their images through `POST /api/fetch` with `article=true`, which checks every address.
+- Graphviz runs with `GV_FILE_PATH` limited to the job folder (a graph cannot include files from the server).
+
 ## [2.5.0] - 2026-11-21
 
 ### Added

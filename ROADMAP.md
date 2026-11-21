@@ -2,7 +2,7 @@
 
 Where Universal Converter is going. Released changes are in [CHANGELOG.md](CHANGELOG.md); ideas and requests are welcome as [issues](https://github.com/EmaLau/universal-converter/issues/new/choose).
 
-**Current version:** 2.5.0 (November 2026): ~200 formats, PDF tools with OCR, API keys, ready-made Docker image, Nextcloud app, web interface in English and Italian, image for amd64 and arm64, conversion options and presets, previews, installable app, PDF slides to PowerPoint, PDF tables, web pages as articles, transcription, batch conversions.
+**Current version:** 2.6.0 (November 2026): ~200 formats, PDF tools with OCR, API keys, ready-made Docker image, Nextcloud app, web interface in English and Italian, image for amd64 and arm64, conversion options and presets, previews, installable app, PDF slides to PowerPoint, PDF tables, web pages as articles, transcription, batch conversions, automatic OCR, substitute fonts, subtitles, email and Graphviz.
 
 ## 2.2 — an English interface
 
@@ -48,10 +48,23 @@ Universal Converter stays focused on **formats**; the advanced PDF tools (passwo
 - [x] **Batch conversion** of an archive (ZIP in, ZIP out) and whole **folders** on the web page.
 - [x] Extracting the audio from a video (*Video to MP3*) and the images from a PDF (through Plico) as ready-made tools.
 
+## 2.6.0 — better results ✅
+
+- [x] **Automatic OCR** of scans before PDF → Word, Excel and text.
+- [x] **Substitute fonts** for the most used commercial fonts, and a folder for your own fonts.
+- [x] **Result check**: a note when PDF → Word changes the number of pages a lot.
+- [x] **Subtitles**: extract the subtitle track of a video, add subtitles to a video (track or burned in).
+- [x] **One CSV per sheet** for workbooks with several sheets.
+- [x] **Email** (EML, Outlook MSG) to PDF and other formats, attachments to ZIP.
+- [x] **Graphviz** diagrams to SVG, PNG, PDF.
+- [x] Jobs that **survive a restart**, memory limit for Python converters, web page tests in a real browser, live
+  Whisper test in CI.
+
 ## Later
 
 - Watched folder and automatic rules in Nextcloud, notifications when a long conversion ends.
 - iPhone Shortcuts documented, a small CLI (`uconv file.docx pdf`), n8n / Paperless-ngx integrations.
+- Subtitle translation with a local LibreTranslate, collections of web articles in one EPUB.
 - A "lite" image without Calibre, LibreOffice and video.
 
 ## Maintenance (ongoing)

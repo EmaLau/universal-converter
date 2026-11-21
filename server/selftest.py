@@ -50,6 +50,35 @@ def make_table_pdf(path: Path) -> None:
         doc.save(path)
 
 
+FODS = """<?xml version="1.0" encoding="UTF-8"?>
+<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+ xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+ office:version="1.3" office:mimetype="application/vnd.oasis.opendocument.spreadsheet"><office:body><office:spreadsheet>
+<table:table table:name="Spese"><table:table-row><table:table-cell office:value-type="string"><text:p>Voce</text:p></table:table-cell>
+<table:table-cell office:value-type="string"><text:p>Euro</text:p></table:table-cell></table:table-row>
+<table:table-row><table:table-cell office:value-type="string"><text:p>Libri</text:p></table:table-cell>
+<table:table-cell office:value-type="float" office:value="42"><text:p>42</text:p></table:table-cell></table:table-row></table:table>
+<table:table table:name="Entrate"><table:table-row><table:table-cell office:value-type="string"><text:p>Borsa</text:p></table:table-cell>
+</table:table-row></table:table></office:spreadsheet></office:body></office:document>
+"""
+
+
+def check_fonts() -> tuple[int, list]:
+    """I caratteri commerciali piu' usati hanno un sostituto (fonts.conf)."""
+    wanted = {"Gill Sans MT": "Gillius ADF", "Century Gothic": "URW Gothic", "Garamond": "EB Garamond",
+              "Calibri": "Carlito", "Segoe UI": "Open Sans"}
+    ok, failed = 0, []
+    for family, expected in wanted.items():
+        got = subprocess.run(["fc-match", "-f", "%{family}", family], capture_output=True, text=True).stdout
+        if expected.lower() in got.lower():
+            ok += 1
+            print(f"ok   carattere {family:16} -> {got.split(',')[0]}")
+        else:
+            failed.append(["font", family])
+            print(f"FAIL carattere {family:16} -> {got} (atteso {expected})")
+    return ok, failed
+
+
 def sh(d: Path, *cmd: str) -> None:
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=d)
 
@@ -91,6 +120,19 @@ def make_samples(d: Path) -> None:
     (d / "dir" / "a.txt").write_text("a")
     sh(d, "bsdtar", "-a", "-cf", "s.zip", "dir")
     sh(d, "bsdtar", "-a", "-cf", "s.tar.gz", "dir")
+    # 2.6: Excel con due fogli (ODS piatto), diagramma Graphviz, email con allegato, video con sottotitoli
+    (d / "fogli.fods").write_text(FODS)
+    (d / "s.gv").write_text('digraph G { rankdir=LR; Convertitore -> PDF; Convertitore -> Word [label="2.6"]; }')
+    from email.message import EmailMessage
+    mail = EmailMessage()
+    mail["Subject"], mail["From"], mail["To"] = "Prova", "anna@example.org", "luca@example.org"
+    mail.set_content("Testo della mail di prova.")
+    mail.add_alternative("<p>Testo della <b>mail</b> di prova. <img src='https://example.org/pixel.gif'></p>",
+                         subtype="html")
+    mail.add_attachment((d / "s.png").read_bytes(), maintype="image", subtype="png", filename="foto.png")
+    (d / "s.eml").write_bytes(bytes(mail))
+    sh(d, "ffmpeg", "-v", "error", "-i", "s.mp4", "-i", "s.srt", "-map", "0", "-map", "1", "-c", "copy", "-c:s", "srt",
+       "-metadata:s:s:0", "language=ita", "sottotitoli.mkv")
     # conversione in blocco: documenti e un'immagine in PDF, l'audio va saltato
     (d / "lotto").mkdir()
     for f in ("s.md", "s.txt", "s.png", "s.wav"):
@@ -178,19 +220,27 @@ def option_cases(d: Path) -> list[tuple[Path, str, dict]]:
             (d / "slide.pdf", "pptx", {}), (d / "slide.pdf", "pptx", {"layout": "exact"}),
             (d / "tabella.pdf", "xlsx", {}), (d / "tabella.pdf", "csv", {}),
             (d / "lotto.zip", "pdf", {}),
+            # 2.6: OCR automatico, un CSV per foglio, Graphviz, email, sottotitoli estratti e aggiunti
+            (d / "scan.pdf", "docx", {}), (d / "scan.pdf", "txt", {}),
+            (d / "fogli.fods", "csv", {}), (d / "s.gv", "svg", {}), (d / "s.gv", "png", {}), (d / "s.gv", "pdf", {}),
+            (d / "s.eml", "pdf", {}), (d / "s.eml", "zip", {}), (d / "s.eml", "md", {}),
+            (d / "sottotitoli.mkv", "srt", {}), (d / "sottotitoli.mkv", "txt", {}),
+            (d / "s.mp4", "mp4", {}, [("subtitles", d / "s.srt")]),
+            (d / "s.mp4", "mkv", {"burn_subtitles": True}, [("subtitles", d / "s.srt")]),
             (d / "s.docx", "pdf", {}), (d / "s.md", "html", {}), (d / "s.avi", "avi", {})]
 
 
 def run_options(api: Api, d: Path) -> tuple[int, list]:
     """Conversioni con le opzioni e anteprima di ogni risultato (se il server le ha)."""
     ok, failed = 0, []
-    for f, target, opts in option_cases(d):
-        label = f"{f.name:8} -> {target:4} {json.dumps(opts)[:40]}"
+    for f, target, opts, *extra in option_cases(d):
+        extra_files = extra[0] if extra else []
+        label = f"{f.name:8} -> {target:4} {json.dumps(opts)[:30]}{' +' + extra_files[0][1].name if extra_files else ''}"
         if not f.exists():
             continue
         try:
             fields = {"target": target, **({"options": json.dumps(opts)} if opts else {})}
-            st = api.wait(api.post("/api/jobs", fields, [("file", f)])["id"])
+            st = api.wait(api.post("/api/jobs", fields, [("file", f), *extra_files])["id"])
             kind = ""
             if st["state"] == "done" and st.get("preview"):
                 req = urllib.request.Request(f"{api.base}/api/jobs/{st['id']}/preview", headers=api.auth)
@@ -252,6 +302,10 @@ def main() -> int:
         opt_ok, opt_failed = run_options(api, d)
         ok += opt_ok
         pdf_failed += opt_failed
+        if shutil.which("fc-match") and Path("/etc/fonts/conf.d/60-universal-converter.conf").exists():
+            font_ok, font_failed = check_fonts()  # solo dentro l'immagine, dove gira il servizio
+            ok += font_ok
+            pdf_failed += font_failed
     finally:
         shutil.rmtree(d, ignore_errors=True)
 

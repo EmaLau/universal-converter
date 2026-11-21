@@ -159,6 +159,13 @@ def test_cross_site_and_headers(client):
     r = client.post("/api/jobs", data={"target": "md"}, files={"file": ("a.txt", b"x")},
                     headers={"Origin": "https://altro.example"})
     assert r.status_code == 403
+    # moduli della stessa pagina con Referrer-Policy no-referrer: Chrome manda Origin null ma Sec-Fetch-Site same-origin
+    post = lambda **h: client.post("/api/jobs", data={"target": "md"}, files={"file": ("a.txt", b"x")}, headers=h)  # noqa: E731
+    assert post(**{"Origin": "null", "Sec-Fetch-Site": "same-origin"}).status_code == 201
+    assert post(**{"Origin": "null"}).status_code == 403
+    assert post(**{"Origin": "null", "Sec-Fetch-Site": "cross-site"}).status_code == 403
+    assert post(**{"Origin": "http://testserver", "Sec-Fetch-Site": "same-site"}).status_code == 201
+    assert post(**{"Origin": "https://sub.altro.example", "Sec-Fetch-Site": "same-site"}).status_code == 403
     r = client.get("/")
     assert "uconv_session" in r.headers.get("set-cookie", "")
     assert r.headers["X-Frame-Options"] == "DENY" and "script-src 'self' 'sha256-" in r.headers["Content-Security-Policy"]

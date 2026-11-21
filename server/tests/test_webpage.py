@@ -25,8 +25,8 @@ def test_applicable_by_last_program():
     g = default_graph()
     assert options.applicable(g.plan("png", "jpg"), "jpg") == ["quality", "max_size", "strip"]
     assert options.applicable(g.plan("jpg", "png"), "png") == ["max_size", "strip"]
-    assert options.applicable(g.plan("mov", "mp4"), "mp4") == ["start", "end", "height", "video_quality",
-                                                             "audio_bitrate", "strip"]
+    assert options.applicable(g.plan("mov", "mp4"), "mp4") == ["start", "end", "height", "subtitles", "burn_subtitles",
+                                                             "video_quality", "audio_bitrate", "strip"]
     assert options.applicable(g.plan("mp4", "gif"), "gif") == ["start", "end", "height", "strip"]
     assert options.applicable(g.plan("wav", "mp3"), "mp3") == ["start", "end", "audio_bitrate", "mono", "strip"]
     assert options.applicable(g.plan("wav", "flac"), "flac") == ["start", "end", "mono", "strip"]
