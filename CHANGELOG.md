@@ -10,6 +10,11 @@ All notable changes to this project are documented here. The format follows
   existing installations: see *Nextcloud integration* in the documentation): English texts with Italian translation (`l10n/`),
   complete `info.xml` (validated against the App Store schema), `scripts/nextcloud-release.sh` to build and sign
   the release archive.
+- **English web interface**: the main page and the admin page follow the browser language, with an IT / EN switch
+  in the header (remembered in the browser). Same mechanism as Plico: `static/i18n.js`.
+- **English API messages** with `Accept-Language`: errors, job steps and notes; responses carry `Content-Language`.
+  Without the header the messages stay in Italian, so existing clients (the Nextcloud app, scripts) see no change.
+- `/docs` in English and Italian (`?lang=en|it`, otherwise from the browser language).
 
 ## [2.1.0] - 2026-11-14
 

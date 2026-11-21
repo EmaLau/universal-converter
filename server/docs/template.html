@@ -21,25 +21,26 @@ $endfor$
     Convertitore
   </a>
   <span class="sep">/</span>
-  <span class="crumb">Documentazione</span>
+  <span class="crumb">$crumb$</span>
   <span class="sp"></span>
-  <a class="cta" href="./">Apri il convertitore →</a>
+  <span class="langs"><a href="docs?lang=it"$if(it)$ class="on"$endif$>IT</a><a href="docs?lang=en"$if(en)$ class="on"$endif$>EN</a></span>
+  <a class="cta" href="./">$cta$</a>
 </header>
 <div class="layout">
   <aside class="side">
     <details class="toc" id="toc" open>
-      <summary>Indice</summary>
+      <summary>$toctitle$</summary>
       $table-of-contents$
     </details>
   </aside>
   <main class="doc">
     <div class="hero">
-      <p class="eyebrow">Documentazione</p>
+      <p class="eyebrow">$crumb$</p>
       <h1 class="title">Universal Converter</h1>
-      <p class="subtitle">Installazione, configurazione, API, funzionamento interno, Nextcloud e sviluppo.</p>
+      <p class="subtitle">$subtitle$</p>
     </div>
 $body$
-    <footer class="foot">Universal Converter · <a href="#">torna su ↑</a></footer>
+    <footer class="foot">Universal Converter · <a href="#">$top$</a></footer>
   </main>
 </div>
 <script>

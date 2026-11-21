@@ -4,7 +4,7 @@ pagetitle: Universal Converter — Documentation
 lang: en
 ---
 
-> 🇮🇹 An Italian version of this document, [`documentazione.md`](documentazione.md), is the one served by every instance at `/docs`. The user interface is in Italian: Italian labels are quoted below with their English meaning.
+> 🇮🇹 An Italian version of this document is in [`documentazione.md`](documentazione.md). Every instance serves both at `/docs` (`?lang=it` or `?lang=en`, otherwise from the browser language). The web interface is in English and Italian, with an IT / EN switch in the header.
 
 # Overview
 
@@ -260,7 +260,7 @@ Also used by the Docker healthcheck. It never requires a key.
 }
 ```
 
-`inputs` also contains the synonyms (`jpeg`, `yml`…), with the same targets as the main format. Category names are returned in Italian (`Documento` = Document, `Foglio di calcolo` = Spreadsheet, and so on).
+`inputs` also contains the synonyms (`jpeg`, `yml`…), with the same targets as the main format. Category names are returned in Italian (`Documento` = Document, `Foglio di calcolo` = Spreadsheet, and so on): they are identifiers, translated by the web page.
 
 ## `GET /api/plan/{src}/{dst}`
 
@@ -293,7 +293,7 @@ Returns `201` with the job status (see below). Errors:
 | `413` | File larger than `MAX_UPLOAD_GB` |
 | `503` | Too many jobs in memory (`MAX_QUEUE`): try again shortly |
 
-Errors always have the form `{"detail": "message"}`. Messages are in Italian, meant to be shown to the user.
+Errors always have the form `{"detail": "message"}`, meant to be shown to the user. Messages are in Italian by default; with `Accept-Language: en` (or any language other than Italian) errors, job steps and notes come in English, and the response has `Content-Language`. Without the header nothing changes, so existing clients keep working.
 
 ## `GET /api/jobs/{id}`
 

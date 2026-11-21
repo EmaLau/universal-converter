@@ -44,7 +44,7 @@ docker compose pull      # immagine pronta da ghcr.io (linux/amd64)
 docker compose up -d
 ```
 
-Apri <http://localhost:8080>. La documentazione completa è su <http://localhost:8080/docs>.
+Apri <http://localhost:8080>. La documentazione completa, in italiano e in inglese, è su <http://localhost:8080/docs>. L’interfaccia segue la lingua del browser e ha un selettore IT / EN nell’intestazione.
 
 Per costruire l'immagine da te (altre architetture, oppure un altro ID utente con `CONVERTER_UID`/`CONVERTER_GID`) usa `docker compose up -d --build`. La prima build scarica LibreOffice, FFmpeg, Calibre e gli altri programmi: richiede qualche minuto.
 

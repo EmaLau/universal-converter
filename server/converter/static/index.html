@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Convertitore</title>
+<script src="static/i18n.js"></script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%234f46e5'/%3E%3Cpath d='M7 9h8l-2.5-2.5M17 15H9l2.5 2.5' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
 :root{
@@ -100,6 +101,9 @@ select{background:var(--surface-2);border:1px solid var(--line);border-radius:10
 .mv{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;cursor:pointer;width:32px;height:32px;line-height:1}
 .mv:disabled{opacity:.35;cursor:default}
 .hidden{display:none!important}
+.lang{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:2px;gap:2px}
+.lang button{border:0;background:transparent;color:var(--muted);font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;cursor:pointer}
+.lang button.on{background:var(--surface-2);color:var(--text)}
 @media (max-width:640px){
   .file{grid-template-columns:auto 1fr}
   .file .actions{grid-column:1/-1;justify-content:flex-end}
@@ -117,6 +121,7 @@ select{background:var(--surface-2);border:1px solid var(--line);border-radius:10
   <div class="sp"></div>
   <a class="pill" href="docs" style="text-decoration:none;color:inherit">Documentazione</a>
   <a class="pill" href="apidocs" style="text-decoration:none;color:inherit">API</a>
+  <span class="lang" data-lang-switch></span>
   <span class="pill" id="privacy" title="I file vengono elaborati su questo server e cancellati dopo qualche ora">🔒 Tutto in locale</span>
 </div></header>
 
@@ -126,7 +131,7 @@ select{background:var(--surface-2);border:1px solid var(--line);border-radius:10
     <p class="lead">Documenti, fogli di calcolo, presentazioni, immagini, audio, video, sottotitoli, ebook, dati, font e archivi, più gli strumenti per i PDF. Niente cloud: tutto avviene sul tuo server.</p>
     <div class="filters" id="filters"></div>
     <div class="grid" id="grid"></div>
-    <details class="formats" id="formats"><summary>Tutti i formati supportati</summary><table id="ftable"></table></details>
+    <details class="formats" id="formats"><summary>Tutti i formati supportati</summary><table id="ftable" translate="no"></table></details>
   </section>
 
   <section id="work" class="hidden">
@@ -301,7 +306,7 @@ function renderFiles(){
     const bar = busy ? el("div",{class:"prog"+(p==null?" ind":"")},el("i",{style:p!=null?`width:${Math.round(p*100)}%`:""})) : "";
     box.append(el("div",{class:"file"},
       el("div",{class:"badge",style:`background:${color(it.ext)}`},(it.ext||"?").slice(0,4)),
-      el("div",{style:"min-width:0"},el("div",{class:"fname",title:it.file.name},it.file.name),el("div",{class:"fmeta"},meta),bar),
+      el("div",{style:"min-width:0"},el("div",{class:"fname",title:it.file.name,translate:"no"},it.file.name),el("div",{class:"fmeta"},meta),bar),
       el("div",{class:"actions"},right, busy?"":el("button",{class:"x",title:"Rimuovi","aria-label":"Rimuovi",onclick:()=>{items=items.filter(x=>x!==it);renderFiles();}},"×"))));
   }
   syncAll();

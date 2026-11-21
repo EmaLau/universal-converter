@@ -8,8 +8,8 @@ Where Universal Converter is going. Released changes are in [CHANGELOG.md](CHANG
 
 - [x] **Nextcloud App Store**: app `universal_converter` 1.1.0 published on [apps.nextcloud.com](https://apps.nextcloud.com/apps/universal_converter) (November 2026), with a signed release archive built by `scripts/nextcloud-release.sh`.
 - [ ] **Screenshots** of the web page, the PDF tools and the Nextcloud menu, in the README and on the App Store.
-- [ ] **English web interface**: the pages are Italian-only today. Move their texts to a small dictionary (`it`, `en`) chosen from the browser language, with a switch in the header.
-- [ ] **English error messages** from the API, chosen with `Accept-Language` (Italian stays the default for compatibility).
+- [x] **English web interface**: texts in a small dictionary (`it`, `en`) chosen from the browser language, with an IT / EN switch in the header; documentation at `/docs` in both languages.
+- [x] **English error messages** from the API, chosen with `Accept-Language` (Italian stays the default for compatibility).
 - [ ] **ARM64 image** on ghcr.io, built natively on GitHub's ARM runners (no emulation), so Raspberry Pi and Apple Silicon users can `docker compose pull` too.
 
 ## 2.3 — more PDF tools

@@ -289,7 +289,7 @@ Risposta `201` con lo stato del lavoro (vedi sotto). Errori:
 | `413` | File più grande di `MAX_UPLOAD_GB` |
 | `503` | Troppi lavori in memoria (`MAX_QUEUE`): riprova tra poco |
 
-Gli errori hanno sempre la forma `{"detail": "messaggio"}`.
+Gli errori hanno sempre la forma `{"detail": "messaggio"}`. I messaggi sono in italiano; con `Accept-Language: en` (o un'altra lingua diversa dall'italiano) errori, passaggi e note dei lavori arrivano in inglese, con l'intestazione `Content-Language`. Senza intestazione non cambia niente.
 
 ## `GET /api/jobs/{id}`
 

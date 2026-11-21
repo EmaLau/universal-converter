@@ -30,10 +30,18 @@ RUN groupadd -g "$GID" converter 2>/dev/null || true \
 
 COPY converter /app/converter
 COPY selftest.py /app/selftest.py
-# Documentazione: dal Markdown alla pagina /docs
+# Documentazione: dal Markdown alle pagine /docs, in italiano e in inglese
 COPY docs /app/docs
 RUN pandoc /app/docs/documentazione.md --standalone --section-divs --toc --toc-depth=2 \
-      --template /app/docs/template.html -H /app/docs/style.html -o /app/converter/static/docs.html
+      --template /app/docs/template.html -H /app/docs/style.html -V lang=it -V it=1 \
+      -V crumb=Documentazione -V "cta=Apri il convertitore →" -V toctitle=Indice -V "top=torna su ↑" \
+      -V "subtitle=Installazione, configurazione, API, funzionamento interno, Nextcloud e sviluppo." \
+      -o /app/converter/static/docs-it.html \
+    && pandoc /app/docs/documentation.md --standalone --section-divs --toc --toc-depth=2 \
+      --template /app/docs/template.html -H /app/docs/style.html -V lang=en -V en=1 \
+      -V crumb=Documentation -V "cta=Open the converter →" -V toctitle=Contents -V "top=back to top ↑" \
+      -V "subtitle=Installation, configuration, API, internals, Nextcloud and development." \
+      -o /app/converter/static/docs-en.html
 
 ENV WORK_DIR=/work HOME=/work/home TMPDIR=/work/tmp QT_QPA_PLATFORM=offscreen QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox
 USER ${UID}:${GID}

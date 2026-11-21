@@ -21,4 +21,4 @@ build-backend = "setuptools.build_meta"
 packages = ["converter"]
 
 [tool.setuptools.package-data]
-converter = ["static/*.html", "entrypoint.sh"]
+converter = ["static/*.html", "static/*.js", "entrypoint.sh"]

@@ -4,5 +4,5 @@ __pycache__/
 .venv/
 .DS_Store
 *.egg-info/
-server/converter/static/docs.html
+server/converter/static/docs-*.html
 dist/

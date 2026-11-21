@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Convertitore · Chiavi API</title>
+<script src="static/i18n.js"></script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%234f46e5'/%3E%3Cpath d='M7 9h8l-2.5-2.5M17 15H9l2.5 2.5' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
 :root{
@@ -60,13 +61,16 @@ code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13p
 .meta{color:var(--muted);font-size:13px}
 .switch{margin:2px 0 4px}
 .hidden{display:none !important}
+.lang{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:2px;gap:2px;margin-right:8px;vertical-align:middle}
+.lang button{border:0;background:transparent;color:var(--muted);font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;cursor:pointer}
+.lang button.on{background:var(--surface-2);color:var(--text)}
 </style>
 </head>
 <body>
 <main>
   <header class="top">
     <a class="brand" href="./"><svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6" fill="var(--accent)"/><path d="M7 9h8l-2.5-2.5M17 15H9l2.5 2.5" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Convertitore</a>
-    <nav class="links"><a href="docs">Documentazione</a><a href="apidocs">Documentazione API</a><button id="logout" class="btn ghost small hidden">Esci</button></nav>
+    <nav class="links"><a href="docs">Documentazione</a><a href="apidocs">Documentazione API</a><span class="lang" data-lang-switch></span><button id="logout" class="btn ghost small hidden">Esci</button></nav>
   </header>
 
   <h1>Chiavi API</h1>
@@ -125,7 +129,7 @@ code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13p
 const $ = s => document.querySelector(s);
 let PERMS = {};
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const when = t => t ? new Date(t * 1000).toLocaleString("it-IT", {dateStyle: "medium", timeStyle: "short"}) : "mai";
+const when = t => t ? new Date(t * 1000).toLocaleString(UC_I18N.lang === "en" ? "en-GB" : "it-IT", {dateStyle: "medium", timeStyle: "short"}) : "mai";
 
 async function call(method, url, body) {
   const r = await fetch(url, {method, headers: {"Content-Type": "application/json", "X-Requested-With": "converter"},
@@ -184,7 +188,7 @@ async function load() {
     const {keys} = await call("GET", "admin/api/keys");
     $("#keys").innerHTML = keys.length ? keys.map(k => `
       <div class="key" data-id="${k.id}">
-        <div class="khead"><div><b>${esc(k.name)}</b> <span class="mono meta">${esc(k.prefix)}…</span>
+        <div class="khead"><div><b translate="no">${esc(k.name)}</b> <span class="mono meta">${esc(k.prefix)}…</span>
           <div class="meta">Creata ${when(k.created)} · ultimo uso: ${when(k.last_used)}</div></div>
           <button class="btn danger small" data-del>Revoca</button></div>
         <div class="perms">${Object.entries(PERMS).map(([p, d]) =>

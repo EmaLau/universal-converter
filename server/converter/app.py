@@ -10,7 +10,7 @@ API (intestazione facoltativa "apikey"; obbligatoria fuori dalla pagina web se l
   GET    /api/jobs/{id}               stato: queued | running | done | error
   GET    /api/jobs/{id}/download      risultato
   DELETE /api/jobs/{id}               cancella subito i file del lavoro
-  GET    /docs                        documentazione
+  GET    /docs                        documentazione (?lang=it|en)
   GET    /apidocs                     documentazione interattiva dell'API
   GET    /admin                       chiavi API (apikeys.py)
 
@@ -30,7 +30,7 @@ from urllib.parse import urlparse
 from fastapi import Body, FastAPI, File, Form, Request, Security, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
-from . import __version__, apikeys, pdftools
+from . import __version__, apikeys, i18n, pdftools
 from .config import Settings
 from .graph import Graph, default_graph
 from .jobs import JobError, JobManager
@@ -46,7 +46,8 @@ Ogni chiave ha dei permessi: `formats` (formati e piani), `convert` (avviare con
 `jobs` (stato, download e cancellazione). La pagina web non ha bisogno della chiave.
 Se nella pagina `/admin` la chiave è obbligatoria, le chiamate senza chiave vengono rifiutate (401).
 
-Gli errori rispondono con JSON `{"detail": "..."}` e un codice HTTP.
+Gli errori rispondono con JSON `{"detail": "..."}` e un codice HTTP. I messaggi sono in italiano;
+con `Accept-Language: en` (o un'altra lingua diversa dall'italiano) errori, passaggi e note arrivano in inglese.
 
 Esempio: `curl -H "apikey: uconv_..." -F file=@relazione.docx -F target=pdf http://host:8080/api/jobs`"""
 
@@ -97,7 +98,7 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
     manager = JobManager(settings, graph)
     keys = apikeys.KeyStore(settings.keys_dir, settings.admin_password, settings.require_key, settings.admin_login)
     set_file_size_limit(settings.max_output_bytes)
-    csp_page = ("default-src 'self'; script-src 'self' " + _inline_hashes("index.html", "admin.html", "docs.html") +
+    csp_page = ("default-src 'self'; script-src 'self' " + _inline_hashes("index.html", "admin.html", "docs-it.html", "docs-en.html") +
                 "; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; "
                 "base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 
@@ -124,9 +125,24 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
         h["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         return resp
 
+    def lang(request: Request) -> str:
+        return i18n.pick(request.headers.get("accept-language"))
+
+    def error_response(request: Request, exc: JobError) -> JSONResponse:
+        lg = lang(request)
+        return JSONResponse({"detail": i18n.t(str(exc), lg)}, status_code=exc.status, headers={"Content-Language": lg})
+
+    def public(request: Request, job) -> dict:
+        """Stato del lavoro, con errore, passaggio e nota nella lingua della richiesta."""
+        d, lg = manager.public(job), lang(request)
+        for k in ("error", "step", "note"):
+            if d.get(k):
+                d[k] = i18n.t(d[k], lg)
+        return d
+
     @app.exception_handler(JobError)
     async def job_error(request: Request, exc: JobError):
-        return JSONResponse({"detail": str(exc)}, status_code=exc.status)
+        return error_response(request, exc)
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
@@ -142,7 +158,7 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
                 elif keys.require_key and not keys.verify("session", request.cookies.get(apikeys.SESSION_COOKIE)):
                     raise JobError(401, "Serve una chiave API nell'intestazione 'apikey'")
         except JobError as e:
-            return security_headers(request, JSONResponse({"detail": str(e)}, status_code=e.status))
+            return security_headers(request, error_response(request, e))
         return security_headers(request, await call_next(request))
 
     # ------------------------------------------------------------ pagine
@@ -155,11 +171,19 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
         return resp
 
     @app.get("/docs", response_class=HTMLResponse, include_in_schema=False)
-    async def docs():
-        doc = STATIC / "docs.html"  # generata da docs/documentazione.md durante la build dell'immagine
+    async def docs(request: Request, lang: str = ""):
+        """Documentazione in italiano o in inglese (?lang=it|en, altrimenti dalla lingua del browser)."""
+        if lang not in ("it", "en"):
+            lang = "en" if i18n.pick(request.headers.get("accept-language")) == "en" else "it"
+        # generate da docs/documentazione.md e docs/documentation.md durante la build dell'immagine
+        doc = STATIC / f"docs-{lang}.html"
         if not doc.exists():
             raise JobError(404, "Documentazione non generata: vedi docs/documentazione.md")
-        return FileResponse(doc, media_type="text/html", headers={"Cache-Control": "no-cache"})
+        return FileResponse(doc, media_type="text/html", headers={"Cache-Control": "no-cache", "Content-Language": lang})
+
+    @app.get("/static/i18n.js", include_in_schema=False)
+    async def i18n_js():
+        return FileResponse(STATIC / "i18n.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
 
     @app.get("/healthz", tags=["Servizio"])
     async def healthz():
@@ -183,10 +207,10 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
         return [{"tool": e.tool, "from": e.src, "to": e.dst} for e in steps]
 
     @app.post("/api/jobs", status_code=201, **api)
-    async def create_job(file: UploadFile = File(...), target: str = Form(...), meta: str = Form("")):
+    async def create_job(request: Request, file: UploadFile = File(...), target: str = Form(...), meta: str = Form("")):
         """Crea un lavoro caricando un file e indicando il formato di destinazione. Permesso: `convert`."""
         job = await manager.create(file, file.filename, target, meta)
-        return manager.public(job)
+        return public(request, job)
 
     @app.get("/api/pdf", **api)
     async def pdf_list():
@@ -194,7 +218,7 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
         return {"tools": [t.public() for t in pdf_tools.values()], "max_upload_bytes": settings.max_upload_bytes}
 
     @app.post("/api/pdf/{tool}", status_code=201, **api)
-    async def pdf_job(tool: str, files: list[UploadFile] = File(...), pages: str = Form(""), angle: str = Form(""),
+    async def pdf_job(request: Request, tool: str, files: list[UploadFile] = File(...), pages: str = Form(""), angle: str = Form(""),
                       level: str = Form(""), lang: str = Form(""), force: str = Form(""), meta: str = Form("")):
         """Avvia uno strumento PDF. Si caricano uno o piu' PDF nel campo `files` (per *merge* nell'ordine voluto)
         e le opzioni dello strumento: `pages` (es. `1-3, 5, 8-`), `angle` (90, 180, 270), `level` (low, medium,
@@ -208,12 +232,12 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
         except pdftools.OptionError as e:
             raise JobError(400, str(e)) from None
         job = await manager.create_tool([(f, f.filename) for f in files], t, opts, meta)
-        return manager.public(job)
+        return public(request, job)
 
     @app.get("/api/jobs/{job_id}", **api)
-    async def job_status(job_id: str):
+    async def job_status(request: Request, job_id: str):
         """Stato del lavoro: queued, running, done o error. Permesso: `jobs`."""
-        return manager.public(manager.get(job_id))
+        return public(request, manager.get(job_id))
 
     @app.get("/api/jobs/{job_id}/download", **api)
     async def job_download(job_id: str):

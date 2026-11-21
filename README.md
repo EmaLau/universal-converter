@@ -33,7 +33,7 @@
 | Audio and video | MP3, FLAC, WAV, OPUS, MP4, MKV, MOV, WEBM, GIF |
 | Other | subtitles (SRT, VTT, ASS), ebooks (EPUB, MOBI, AZW3, CBR), data (JSON, YAML, TOML), fonts (TTF, OTF, WOFF2), archives (ZIP, 7Z, RAR, TAR.ZST, ISO) |
 
-> The user interface is in Italian. The API, the formats and this documentation are language-independent.
+> The web interface is in **English and Italian**: it follows the browser language and has an IT / EN switch in the header. API errors are in English when the request sends `Accept-Language: en`.
 
 ## Quick start
 
@@ -46,7 +46,7 @@ docker compose pull      # ready-made image from ghcr.io (linux/amd64)
 docker compose up -d
 ```
 
-Open <http://localhost:8080>. The built-in documentation (in Italian) is at <http://localhost:8080/docs>; the English version is [here](server/docs/documentation.md).
+Open <http://localhost:8080>. The built-in documentation, in English and Italian, is at <http://localhost:8080/docs> (also [here](server/docs/documentation.md)).
 
 To build the image yourself instead (other architectures, or a different user ID with `CONVERTER_UID`/`CONVERTER_GID`), run `docker compose up -d --build`. The first build downloads LibreOffice, FFmpeg, Calibre and the other programs, so it takes a few minutes.
 
