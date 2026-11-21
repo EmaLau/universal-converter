@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-11-21
+
 ### Added
 - Nextcloud app 1.1.0, ready for the Nextcloud App Store, with the new id `universal_converter` (was `convertitore`;
   existing installations: see *Nextcloud integration* in the documentation): English texts with Italian translation (`l10n/`),
@@ -44,7 +46,8 @@ All notable changes to this project are documented here. The format follows
 First public release: about 200 formats and more than 3,000 combinations with chained conversions, web page,
 JSON API, Nextcloud app "Converti in" and automatic PDFs for Nextcloud.
 
-[Unreleased]: https://github.com/EmaLau/universal-converter/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/EmaLau/universal-converter/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/EmaLau/universal-converter/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/EmaLau/universal-converter/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/EmaLau/universal-converter/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/EmaLau/universal-converter/releases/tag/v1.0.0

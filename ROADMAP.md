@@ -2,7 +2,7 @@
 
 Where Universal Converter is going. Released changes are in [CHANGELOG.md](CHANGELOG.md); ideas and requests are welcome as [issues](https://github.com/EmaLau/universal-converter/issues/new/choose).
 
-**Current version:** 2.1.0 (November 2026): ~200 formats, PDF tools with OCR, API keys, ready-made Docker image, Nextcloud app.
+**Current version:** 2.2.0 (November 2026): ~200 formats, PDF tools with OCR, API keys, ready-made Docker image, Nextcloud app, web interface in English and Italian.
 
 ## 2.2 — an English interface
 

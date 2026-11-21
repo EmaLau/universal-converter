@@ -84,7 +84,7 @@ docker compose up -d
 
 Then open <http://localhost:8080>.
 
-The ready-made image is published by GitHub Actions for every release (tags `latest`, `2.1`, `2.1.0`…), after the self-test has passed inside it. It is built for linux/amd64 and runs as user 1000. To build it yourself (ARM64, another user ID with `CONVERTER_UID`/`CONVERTER_GID`, local changes) use `docker compose up -d --build` instead.
+The ready-made image is published by GitHub Actions for every release (tags `latest`, `2.2`, `2.2.0`…), after the self-test has passed inside it. It is built for linux/amd64 and runs as user 1000. To build it yourself (ARM64, another user ID with `CONVERTER_UID`/`CONVERTER_GID`, local changes) use `docker compose up -d --build` instead.
 
 The first build downloads LibreOffice, FFmpeg, Calibre and the other programs: about 500 MB to download and a final image of about 3.5 GB. Depending on your connection it takes 5-20 minutes. Later builds are much faster: the programs live in a separate image layer that stays cached, and if you only change the code the build takes a few seconds.
 

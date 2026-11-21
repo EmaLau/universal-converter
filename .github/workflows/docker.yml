@@ -1,7 +1,7 @@
 name: Docker image
 
-# Each release tag (v2.1.0, ...) builds the image, runs the self-test inside it and publishes it to
-# ghcr.io/emalau/universal-converter with the tags 2.1.0, 2.1 and latest.
+# Each release tag (v2.2.0, ...) builds the image, runs the self-test inside it and publishes it to
+# ghcr.io/emalau/universal-converter with the tags 2.2.0, 2.2 and latest.
 on:
   push:
     tags: ["v*"]
