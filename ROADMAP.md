@@ -2,7 +2,7 @@
 
 Where Universal Converter is going. Released changes are in [CHANGELOG.md](CHANGELOG.md); ideas and requests are welcome as [issues](https://github.com/EmaLau/universal-converter/issues/new/choose).
 
-**Current version:** 2.2.2 (November 2026): ~200 formats, PDF tools with OCR, API keys, ready-made Docker image, Nextcloud app, web interface in English and Italian, image for amd64 and arm64.
+**Current version:** 2.3.0 (November 2026): ~200 formats, PDF tools with OCR, API keys, ready-made Docker image, Nextcloud app, web interface in English and Italian, image for amd64 and arm64.
 
 ## 2.2 — an English interface
 
@@ -12,20 +12,20 @@ Where Universal Converter is going. Released changes are in [CHANGELOG.md](CHANG
 - [x] **English error messages** from the API, chosen with `Accept-Language` (Italian stays the default for compatibility).
 - [x] **ARM64 image** on ghcr.io, built natively on GitHub's ARM runners (no emulation), so Raspberry Pi and Apple Silicon users can `docker compose pull` too.
 
-## 2.3 — PDF tools through Plico
+## 2.3 — PDF tools through Plico ✅
 
 Universal Converter stays focused on **formats**; the advanced PDF tools (password, watermark and page numbers, PDF/A, organize pages, sign, redact, forms, compare…) live in the sister project [Plico](https://github.com/EmaLau/plico), which already sends Office files to the converter. The two work together instead of duplicating code.
 
 - [x] **`PLICO_URL`**: when set, the web page shows a *More PDF tools in Plico* card (2.2.2).
-- [ ] Open a converted PDF directly in Plico, without downloading and uploading it again.
-- [ ] PDF tools in the **Nextcloud menu** (Plico already has its own Nextcloud app with a *PDF tools* menu).
+- [x] Open a converted PDF directly in Plico, without downloading and uploading it again: *Open in Plico* (2.3.0).
+- [x] PDF tools in the **Nextcloud menu**: covered by Plico's own Nextcloud app (*PDF tools* in the right-click menu).
 
-## 2.4 — integrations and operations
+## 2.4 — integrations and operations ✅ (in 2.3.0)
 
-- [ ] **Webhooks**: an optional `callback_url` in `POST /api/jobs` and `POST /api/pdf/{tool}`, called when the job ends, so clients do not need to poll.
+- [x] **Webhooks**: an optional `callback_url` in `POST /api/jobs` and `POST /api/pdf/{tool}`, called when the job ends, so clients do not need to poll; signed with `WEBHOOK_SECRET` (2.3.0).
 - [x] **Download several results as one ZIP** from the web page (`POST /api/jobs/zip`, 2.2.2).
-- [ ] **Per-key limits**: maximum concurrent jobs and daily volume for each API key.
-- [ ] **Metrics** at `/metrics` (Prometheus): jobs, failures and duration per tool.
+- [x] **Per-key limits**: maximum concurrent jobs and daily volume for each API key, set on the `/admin` page (2.3.0).
+- [x] **Metrics** at `/metrics` (Prometheus): jobs, failures and duration per tool (2.3.0).
 - [x] `/healthz` reports which conversion programs are available (2.2.2).
 
 ## Maintenance (ongoing)

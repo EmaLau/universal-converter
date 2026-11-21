@@ -31,10 +31,10 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import Body, FastAPI, File, Form, Request, Security, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from starlette.background import BackgroundTask
 
-from . import __version__, apikeys, i18n, pdftools
+from . import __version__, apikeys, i18n, pdftools, webhooks
 from .config import Settings
 from .graph import Graph, default_graph
 from .jobs import JobError, JobManager
@@ -152,6 +152,16 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
         lg = lang_of(request)
         return JSONResponse({"detail": i18n.t(str(exc), lg)}, status_code=exc.status, headers={"Content-Language": lg})
 
+    def job_args(request: Request, callback_url: str) -> dict:
+        """Chiave che fa la richiesta (con i suoi limiti), lingua e webhook per un nuovo lavoro."""
+        kid = getattr(request.state, "key_id", "")
+        try:
+            cb = webhooks.check_url(callback_url, settings.webhook_hosts)
+        except ValueError as e:
+            raise JobError(400, str(e)) from None
+        return {"key_id": kid, "limits": keys.limits(kid) if kid else None, "callback_url": cb,
+                "lang": lang_of(request)}
+
     def public(request: Request, job) -> dict:
         """Stato del lavoro, con errore, passaggio e nota nella lingua della richiesta."""
         d, lg = manager.public(job), lang_of(request)
@@ -174,7 +184,7 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
             if perm:
                 key = request.headers.get("apikey")
                 if key:
-                    keys.check_key(key, perm)
+                    request.state.key_id = keys.check_key(key, perm)
                 elif keys.require_key and not keys.verify("session", request.cookies.get(apikeys.SESSION_COOKIE)):
                     raise JobError(401, "Serve una chiave API nell'intestazione 'apikey'")
         except JobError as e:
@@ -205,6 +215,36 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
     async def i18n_js():
         return FileResponse(STATIC / "i18n.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
 
+    @app.get("/metrics", tags=["Servizio"], response_class=PlainTextResponse)
+    async def metrics():
+        """Metriche per Prometheus (dall'avvio del servizio): lavori per tipo ed esito, durata, coda, byte caricati,
+        webhook, richieste rifiutate dai limiti delle chiavi. Non richiede la chiave; METRICS=false la spegne."""
+        if not settings.metrics:
+            raise JobError(404, "Metriche disattivate (METRICS=false)")
+        st, out = manager.stats(), []
+
+        def metric(name: str, kind: str, help_: str, rows: list[tuple[dict, float]]):
+            out.append(f"# HELP uconv_{name} {help_}")
+            out.append(f"# TYPE uconv_{name} {kind}")
+            for labels, v in rows:
+                lab = ",".join(f'{k}="{val}"' for k, val in labels.items())
+                out.append(f"uconv_{name}{{{lab}}} {v:g}" if lab else f"uconv_{name} {v:g}")
+
+        metric("info", "gauge", "Version of the service", [({"version": __version__}, 1)])
+        metric("jobs_finished_total", "counter", "Finished jobs by kind (convert or PDF tool) and state",
+               [({"kind": k, "state": s}, n) for (k, s), n in sorted(manager.completed.items())])
+        metric("job_duration_seconds_total", "counter", "Total running time of finished jobs by kind",
+               [({"kind": k}, v) for k, v in sorted(manager.duration.items())])
+        metric("jobs", "gauge", "Jobs in memory by state",
+               [({"state": "queued"}, st["queued"]), ({"state": "running"}, st["running"]),
+                ({"state": "kept"}, st["jobs"] - st["queued"] - st["running"])])
+        metric("upload_bytes_total", "counter", "Bytes uploaded", [({}, manager.bytes_in)])
+        metric("webhooks_total", "counter", "Webhook deliveries by result",
+               [({"result": r}, manager.webhooks[r]) for r in ("ok", "error")])
+        metric("rejected_total", "counter", "Requests refused by API key limits",
+               [({"reason": r}, manager.rejected[r]) for r in ("jobs", "daily")])
+        return PlainTextResponse("\n".join(out) + "\n", media_type="text/plain; version=0.0.4")
+
     @app.get("/healthz", tags=["Servizio"])
     async def healthz():
         """Stato del servizio e programmi di conversione installati: non richiede la chiave."""
@@ -228,9 +268,11 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
         return [{"tool": e.tool, "from": e.src, "to": e.dst} for e in steps]
 
     @app.post("/api/jobs", status_code=201, **api)
-    async def create_job(request: Request, file: UploadFile = File(...), target: str = Form(...), meta: str = Form("")):
-        """Crea un lavoro caricando un file e indicando il formato di destinazione. Permesso: `convert`."""
-        job = await manager.create(file, file.filename, target, meta)
+    async def create_job(request: Request, file: UploadFile = File(...), target: str = Form(...), meta: str = Form(""),
+                         callback_url: str = Form("")):
+        """Crea un lavoro caricando un file e indicando il formato di destinazione. Con `callback_url` il server
+        chiama quell'indirizzo (POST, JSON) quando il lavoro finisce. Permesso: `convert`."""
+        job = await manager.create(file, file.filename, target, meta, **job_args(request, callback_url))
         return public(request, job)
 
     @app.get("/api/pdf", **api)
@@ -240,7 +282,8 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
 
     @app.post("/api/pdf/{tool}", status_code=201, **api)
     async def pdf_job(request: Request, tool: str, files: list[UploadFile] = File(...), pages: str = Form(""), angle: str = Form(""),
-                      level: str = Form(""), lang: str = Form(""), force: str = Form(""), meta: str = Form("")):
+                      level: str = Form(""), lang: str = Form(""), force: str = Form(""), meta: str = Form(""),
+                      callback_url: str = Form("")):
         """Avvia uno strumento PDF. Si caricano uno o piu' PDF nel campo `files` (per *merge* nell'ordine voluto)
         e le opzioni dello strumento: `pages` (es. `1-3, 5, 8-`), `angle` (90, 180, 270), `level` (low, medium,
         high), `lang` (lingue di Tesseract, es. `ita+eng`), `force` (true per rifare l'OCR).
@@ -252,7 +295,8 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
             opts = t.parse({"pages": pages, "angle": angle, "level": level, "lang": lang, "force": force})
         except pdftools.OptionError as e:
             raise JobError(400, str(e)) from None
-        job = await manager.create_tool([(f, f.filename) for f in files], t, opts, meta, lang_of(request))
+        args = job_args(request, callback_url)
+        job = await manager.create_tool([(f, f.filename) for f in files], t, opts, meta, args.pop("lang"), **args)
         return public(request, job)
 
     @app.post("/api/jobs/zip", **api)
@@ -352,19 +396,21 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
     @app.get("/admin/api/keys", include_in_schema=False)
     async def keys_list(request: Request):
         admin_only(request)
-        return {"keys": keys.list()}
+        return {"keys": [k | {"used_today_mb": round(manager.used_today(k["id"]) / 1024**2, 1),
+                              "active": manager.active(k["id"])} for k in keys.list()]}
 
     @app.post("/admin/api/keys", include_in_schema=False)
-    async def keys_create(request: Request, name: str = Body(...), perms: list[str] = Body(...)):
+    async def keys_create(request: Request, name: str = Body(...), perms: list[str] = Body(...),
+                          max_jobs: int | None = Body(None), max_daily_mb: int | None = Body(None)):
         admin_only(request, write=True)
-        key, rec = keys.create(name, perms)
+        key, rec = keys.create(name, perms, max_jobs, max_daily_mb)
         return {"key": key, **rec}
 
     @app.put("/admin/api/keys/{kid}", include_in_schema=False)
-    async def keys_update(request: Request, kid: str, name: str | None = Body(None),
-                          perms: list[str] | None = Body(None)):
+    async def keys_update(request: Request, kid: str, body: dict = Body(...)):
         admin_only(request, write=True)
-        return keys.update(kid, name, perms)
+        extra = {k: body[k] for k in ("max_jobs", "max_daily_mb") if k in body}
+        return keys.update(kid, body.get("name"), body.get("perms"), **extra)
 
     @app.delete("/admin/api/keys/{kid}", include_in_schema=False)
     async def keys_delete(request: Request, kid: str):

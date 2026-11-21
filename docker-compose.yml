@@ -26,6 +26,9 @@ services:
       CONVERTER_ADMIN_LOGIN: ${CONVERTER_ADMIN_LOGIN:-true}
       API_REQUIRE_KEY: ${API_REQUIRE_KEY:-false}
       PLICO_URL: ${PLICO_URL:-}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+      WEBHOOK_HOSTS: ${WEBHOOK_HOSTS:-}
+      METRICS: ${METRICS:-true}
     volumes:
       - converter-work:/work
     deploy:

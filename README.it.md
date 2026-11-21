@@ -36,7 +36,8 @@ Le schermate mostrano l'interfaccia in inglese; con il selettore IT / EN (o un b
 - **API JSON** per script e altre applicazioni, con **chiavi API** (permessi per funzione, revocabili, gestite nella pagina `/admin`) e documentazione interattiva su `/apidocs`.
 - **App Nextcloud** (facoltativa): tasto destro su un file → **Converti in ▸ formato**, e il risultato appare accanto all'originale.
 - **PDF automatici** (facoltativi) accanto agli appunti Xournal++ e ai documenti Office in Nextcloud.
-- **Robusto**: coda con limite di conversioni contemporanee, tempi massimi, limite di dimensione sui file creati, pulizia automatica.
+- **Integrazioni**: webhook a fine lavoro (firmati con HMAC), limiti per chiave API (lavori contemporanei, MB al giorno), metriche Prometheus su `/metrics` e il progetto gemello [Plico](https://github.com/EmaLau/plico) per gli strumenti PDF avanzati: *Apri in Plico* su ogni risultato PDF.
+- **Robusto**: coda con limite di conversioni contemporanee, tempi massimi, limite di dimensione sui file creati, pulizia automatica e una prova con file malformati su ogni immagine.
 
 | Categoria | Alcuni formati |
 |---|---|

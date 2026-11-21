@@ -137,7 +137,10 @@ Settings go in `.env`, in the project's root folder (start from `.env.example`).
 | `DISABLED_CONVERSIONS` | empty | Conversions to hide, comma-separated. Example: `heic>avif,pdf>epub`. |
 | `CONVERTER_ADMIN_PASSWORD` | empty | Password for the `/admin` page that manages [API keys](#api-keys). It can also be written in `/work/data/admin-password`. Without a password the admin area stays disabled. |
 | `API_REQUIRE_KEY` | `false` | Initial value of the *Key required for the API* switch; afterwards the value saved on the `/admin` page wins. |
-| `PLICO_URL` | *(empty)* | Address of a [Plico](https://github.com/EmaLau/plico) instance, as the browser reaches it (`http://nas:30128`), or just `:30128` for the same host on another port. When set, the web page shows a *More PDF tools in Plico* card. |
+| `PLICO_URL` | *(empty)* | Address of a [Plico](https://github.com/EmaLau/plico) instance, as the browser reaches it (`http://nas:30128`), or just `:30128` for the same host on another port. When set, the web page shows a *More PDF tools in Plico* card, and PDF results get an *Open in Plico* button (Plico needs `CONVERTER_URL` and `CONVERTER_API_KEY`). |
+| `WEBHOOK_SECRET` | *(empty)* | Signs the webhooks: `X-Converter-Signature: sha256=<HMAC-SHA256 of the body>`. |
+| `WEBHOOK_HOSTS` | *(empty)* | Hosts allowed in `callback_url`, comma-separated (`n8n.lan, paperless`). Empty = any host. |
+| `METRICS` | `true` | `false` turns off `GET /metrics`. |
 | `CONVERTER_ADMIN_LOGIN` | `true` | Initial value of the *Password to enter this page* switch. |
 | `DATA_DIR` | `/work/data` | Folder holding the API keys and admin settings. |
 | `CONVERTER_CPUS` | `4` | Maximum CPUs for the container. |
@@ -218,6 +221,7 @@ Keys are created on the `/admin` page, modelled on Gokapi. To enable it set `CON
 - The web page needs no key: opening it gives a signed session cookie.
 - The **Key required for the API** switch (off by default) rejects with `401` calls without a key made outside the web page. When off, calls without a key are accepted as before, while calls with a key are limited to its permissions.
 - The **Password to enter this page** switch can be turned off, but then anyone who reaches the service can manage the keys.
+- **Limits per key** (optional, on the `/admin` page): *concurrent jobs* (queued or running) and *MB per day* uploaded. Over the limit the call gets `429`; the page shows today's usage and the jobs in progress of each key. Usage is counted in memory, by local day, and starts again from zero after a restart. The web page (session, no key) is never limited.
 - Admin area protections: signed cookie valid for 12 hours (`SameSite=Strict`), 5 wrong attempts per IP address in 10 minutes then `429`; changes require the `X-Requested-With` header.
 
 ```bash
@@ -229,6 +233,7 @@ curl -H "apikey: uconv_..." -F file=@report.docx -F target=pdf http://localhost:
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/healthz` | Service status |
+| `GET` | `/metrics` | Prometheus metrics |
 | `GET` | `/api/formats` | Supported formats and combinations |
 | `GET` | `/api/plan/{src}/{dst}` | Planned steps for a conversion |
 | `POST` | `/api/jobs` | Create a job by uploading a file |
@@ -288,6 +293,7 @@ A `multipart/form-data` request with these fields:
 | `file` | yes | The file to convert. The source format is taken from the file name's extension. |
 | `target` | yes | Target extension, for example `pdf`. |
 | `meta` | no | Free text (at most 2,000 characters) returned in the job status: useful for integrations. |
+| `callback_url` | no | Webhook: an `http`/`https` address called with `POST` when the job ends (see *Webhooks*). |
 
 Returns `201` with the job status (see below). Errors:
 
@@ -295,6 +301,7 @@ Returns `201` with the job status (see below). Errors:
 |---|---|
 | `400` | Conversion not supported, or empty file |
 | `413` | File larger than `MAX_UPLOAD_GB` |
+| `429` | Limit of the API key reached (concurrent jobs or MB per day) |
 | `503` | Too many jobs in memory (`MAX_QUEUE`): try again shortly |
 
 Errors always have the form `{"detail": "message"}`, meant to be shown to the user. Messages are in Italian by default; with `Accept-Language: en` (or any language other than Italian) errors, job steps and notes come in English, and the response has `Content-Language`. Without the header nothing changes, so existing clients keep working.
@@ -341,6 +348,35 @@ Form fields: `ids`, the job ids separated by commas (at most 200), and optionall
 
 Deletes the job and its files immediately. If it is still running, it is stopped. Returns `{"ok": true}`.
 
+## Webhooks
+
+With `callback_url` in `POST /api/jobs` or `POST /api/pdf/{tool}`, the server calls that address when the job ends, so the client does not need to poll:
+
+- `POST` with `Content-Type: application/json`; the body is the job status, the same as `GET /api/jobs/{id}`, in the language of the request that created the job.
+- `X-Converter-Event: job.done` or `job.error`; with `WEBHOOK_SECRET`, `X-Converter-Signature: sha256=<HMAC-SHA256 of the body>`.
+- Three attempts (at once, after 5 and after 30 seconds), 10 seconds of timeout each, redirects not followed; a `4xx` answer stops the attempts.
+- The job status shows the outcome in `webhook`: `pending`, `ok` or the last error.
+- `WEBHOOK_HOSTS` limits the hosts that can be called; without it any address the server can reach is allowed, so keep API keys for trusted clients.
+
+Checking the signature in Python:
+
+```python
+import hashlib, hmac
+expected = "sha256=" + hmac.new(SECRET.encode(), request_body, hashlib.sha256).hexdigest()
+assert hmac.compare_digest(expected, headers["X-Converter-Signature"])
+```
+
+## `GET /metrics`
+
+Prometheus metrics since the service started; no key needed (`METRICS=false` turns it off). `uconv_jobs_finished_total{kind,state}` (kind = `convert` or a PDF tool), `uconv_job_duration_seconds_total{kind}`, `uconv_jobs{state}` (queued, running, kept), `uconv_upload_bytes_total`, `uconv_webhooks_total{result}`, `uconv_rejected_total{reason}` (API key limits), `uconv_info{version}`. File names and job ids are never exposed.
+
+```yaml
+scrape_configs:
+  - job_name: universal-converter
+    static_configs:
+      - targets: ["converter:8080"]
+```
+
 ## `GET /api/pdf`
 
 The available PDF tools with their options (name, type, default, choices), in the format used by the web page. A tool whose program is missing (for example `ocrmypdf` outside the container) is not listed.
@@ -358,6 +394,7 @@ Starts a PDF tool: `merge`, `split`, `extract`, `remove`, `rotate`, `compress` o
 | `lang` | `ocr` | Tesseract languages joined by `+` (default `ita+eng`); the image includes `ita`, `eng` and `osd` |
 | `force` | `ocr` | `true` to redo OCR on pages that already have text (by default they are left untouched) |
 | `meta` | all | Free text returned in the status |
+| `callback_url` | all | Webhook called when the job ends (see *Webhooks*) |
 
 It returns `201` with the job status, which also has `tool`, `files` and, when useful, `note` (for example "size reduced by 63%"). From then on use `/api/jobs/{id}` and `/api/jobs/{id}/download` as for conversions. Errors: `400` for wrong options, non-PDF files or the wrong number of files, `404` for an unknown tool, `413` and `503` as above. Pages that do not exist (`9-12` in a 10-page PDF) make the job end with `error`.
 

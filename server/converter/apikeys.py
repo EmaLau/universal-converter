@@ -124,7 +124,26 @@ class KeyStore:
     def _hash(key: str) -> str:
         return hashlib.sha256(key.encode()).hexdigest()
 
-    def create(self, name: str, perms: list[str]) -> tuple[str, dict]:
+    @staticmethod
+    def _limit(value, name: str) -> int | None:
+        """Limite di una chiave: intero positivo, oppure None/0/"" = nessun limite."""
+        if value in (None, "", 0):
+            return None
+        try:
+            v = int(value)
+        except (TypeError, ValueError):
+            raise JobError(400, f"Limite non valido: {name}") from None
+        if v < 0 or v > 10**7:
+            raise JobError(400, f"Limite non valido: {name}")
+        return v or None
+
+    def limits(self, kid: str) -> dict | None:
+        rec = self.keys.get(kid)
+        if not rec:
+            return None
+        return {"max_jobs": rec.get("max_jobs"), "max_daily_mb": rec.get("max_daily_mb")}
+
+    def create(self, name: str, perms: list[str], max_jobs=None, max_daily_mb=None) -> tuple[str, dict]:
         name = name.strip()[:80]
         if not name:
             raise JobError(400, "Dai un nome alla chiave")
@@ -132,13 +151,17 @@ class KeyStore:
         key = KEY_PREFIX + secrets.token_urlsafe(32)
         kid = secrets.token_hex(6)
         rec = {"name": name, "hash": self._hash(key), "prefix": key[:10], "perms": perms,
-               "created": int(time.time()), "last_used": None}
+               "created": int(time.time()), "last_used": None,
+               "max_jobs": self._limit(max_jobs, "max_jobs"), "max_daily_mb": self._limit(max_daily_mb, "max_daily_mb")}
         with self.lock:
             self.keys[kid] = rec
             self._save()
         return key, self.public(kid, rec)
 
-    def update(self, kid: str, name: str | None, perms: list[str] | None) -> dict:
+    _UNSET = object()
+
+    def update(self, kid: str, name: str | None, perms: list[str] | None, max_jobs=_UNSET,
+               max_daily_mb=_UNSET) -> dict:
         with self.lock:
             rec = self.keys.get(kid)
             if not rec:
@@ -147,6 +170,10 @@ class KeyStore:
                 rec["name"] = name.strip()[:80]
             if perms is not None:
                 rec["perms"] = self._clean_perms(perms)
+            if max_jobs is not KeyStore._UNSET:
+                rec["max_jobs"] = self._limit(max_jobs, "max_jobs")
+            if max_daily_mb is not KeyStore._UNSET:
+                rec["max_daily_mb"] = self._limit(max_daily_mb, "max_daily_mb")
             self._save()
             return self.public(kid, rec)
 
@@ -163,7 +190,8 @@ class KeyStore:
     @staticmethod
     def public(kid: str, rec: dict) -> dict:
         return {"id": kid, "name": rec["name"], "prefix": rec["prefix"], "perms": rec["perms"],
-                "created": rec["created"], "last_used": rec["last_used"]}
+                "created": rec["created"], "last_used": rec["last_used"],
+                "max_jobs": rec.get("max_jobs"), "max_daily_mb": rec.get("max_daily_mb")}
 
     @staticmethod
     def _clean_perms(perms: list[str]) -> list[str]:
@@ -172,11 +200,11 @@ class KeyStore:
             raise JobError(400, f"Permessi sconosciuti: {', '.join(bad)}")
         return [p for p in PERMISSIONS if p in perms]
 
-    def check_key(self, key: str, perm: str) -> None:
-        """401 se la chiave non esiste, 403 se non ha il permesso; aggiorna l'ultimo uso."""
+    def check_key(self, key: str, perm: str) -> str:
+        """401 se la chiave non esiste, 403 se non ha il permesso; aggiorna l'ultimo uso e restituisce l'id."""
         h = self._hash(key)
         with self.lock:
-            for rec in self.keys.values():
+            for kid, rec in self.keys.items():
                 if hmac.compare_digest(rec["hash"], h):
                     break
             else:
@@ -189,6 +217,7 @@ class KeyStore:
                 self._save()
             else:
                 self._dirty = True
+            return kid
 
     def flush(self):
         with self.lock:

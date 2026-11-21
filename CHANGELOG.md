@@ -5,6 +5,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-11-21
+
+### Added
+- **Open in Plico**: with `PLICO_URL`, every PDF result has an *Open in Plico* button. Plico fetches the file from
+  the converter on its side (with its API key) and offers it straight away, without downloading and uploading it again.
+- **Webhooks**: optional `callback_url` in `POST /api/jobs` and `POST /api/pdf/{tool}`. When the job ends the server
+  sends the job status as JSON (`X-Converter-Event: job.done|job.error`), signed with `WEBHOOK_SECRET` if set
+  (`X-Converter-Signature: sha256=...`); three attempts, no redirects, outcome in the job's `webhook` field.
+  `WEBHOOK_HOSTS` limits the hosts that can be called.
+- **Limits per API key**: concurrent jobs and MB per day, set on the `/admin` page (`429` when exceeded); the page
+  shows today's usage and the jobs in progress of each key. The web page is never limited.
+- **Prometheus metrics** at `/metrics`: finished jobs and duration per kind, queue, uploaded bytes, webhooks,
+  requests refused by key limits. `METRICS=false` turns it off.
+
+### Changed
+- Error messages no longer show internal paths (`/work/jobs/<id>/...`): only the file name is left.
+
 ## [2.2.2] - 2026-11-21
 
 ### Added
@@ -72,7 +89,8 @@ All notable changes to this project are documented here. The format follows
 First public release: about 200 formats and more than 3,000 combinations with chained conversions, web page,
 JSON API, Nextcloud app "Converti in" and automatic PDFs for Nextcloud.
 
-[Unreleased]: https://github.com/EmaLau/universal-converter/compare/v2.2.2...HEAD
+[Unreleased]: https://github.com/EmaLau/universal-converter/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/EmaLau/universal-converter/compare/v2.2.2...v2.3.0
 [2.2.2]: https://github.com/EmaLau/universal-converter/compare/v2.2.1...v2.2.2
 [2.2.1]: https://github.com/EmaLau/universal-converter/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/EmaLau/universal-converter/compare/v2.1.0...v2.2.0

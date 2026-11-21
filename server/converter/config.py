@@ -37,6 +37,9 @@ class Settings:
     require_key: bool = False       # valore iniziale di "chiave obbligatoria per le API"
     admin_login: bool = True        # valore iniziale di "password per l'area admin"
     plico_url: str = ""             # indirizzo di Plico per il browser (es. http://nas:30128 o ":30128" = stesso host)
+    webhook_secret: str = ""        # firma HMAC dei webhook (X-Converter-Signature)
+    webhook_hosts: frozenset[str] = field(default_factory=frozenset)  # host ammessi per callback_url (vuoto = tutti)
+    metrics: bool = True            # GET /metrics per Prometheus
 
     @property
     def jobs_dir(self) -> Path:
@@ -70,4 +73,7 @@ class Settings:
             require_key=truthy(env.get("API_REQUIRE_KEY")),
             admin_login=truthy(env.get("CONVERTER_ADMIN_LOGIN", "true")),
             plico_url=env.get("PLICO_URL", "").strip(),
+            webhook_secret=env.get("WEBHOOK_SECRET", ""),
+            webhook_hosts=frozenset(h.strip().lower() for h in env.get("WEBHOOK_HOSTS", "").split(",") if h.strip()),
+            metrics=truthy(env.get("METRICS", "true")),
         )

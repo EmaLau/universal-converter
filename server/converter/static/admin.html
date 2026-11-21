@@ -64,6 +64,9 @@ code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13p
 .lang{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:2px;gap:2px;margin-right:8px;vertical-align:middle}
 .lang button{border:0;background:transparent;color:var(--muted);font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;cursor:pointer}
 .lang button.on{background:var(--surface-2);color:var(--text)}
+.limits{margin-top:10px;gap:12px}
+.limits .f{flex:1 1 180px}
+.limits input{width:100%}
 </style>
 </head>
 <body>
@@ -96,6 +99,10 @@ code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13p
       <form id="createForm">
         <label class="f">Nome (per ricordarti chi la usa)<input type="text" id="name" maxlength="80" placeholder="es. App Nextcloud" required></label>
         <div class="perms" id="newPerms"></div>
+        <div class="row limits">
+          <label class="f">Lavori contemporanei<input type="number" id="maxJobs" min="1" step="1" placeholder="senza limite"></label>
+          <label class="f">MB al giorno<input type="number" id="maxMb" min="1" step="1" placeholder="senza limite"></label>
+        </div>
         <div class="row"><button class="btn" type="submit">Crea chiave</button>
           <button class="btn ghost small" type="button" id="allPerms">Tutti i permessi</button></div>
       </form>
@@ -189,10 +196,15 @@ async function load() {
     $("#keys").innerHTML = keys.length ? keys.map(k => `
       <div class="key" data-id="${k.id}">
         <div class="khead"><div><b translate="no">${esc(k.name)}</b> <span class="mono meta">${esc(k.prefix)}…</span>
-          <div class="meta">Creata ${when(k.created)} · ultimo uso: ${when(k.last_used)}</div></div>
+          <div class="meta">Creata ${when(k.created)} · ultimo uso: ${when(k.last_used)}</div>
+          <div class="meta">Oggi: ${k.used_today_mb} MB · in corso: ${k.active}</div></div>
           <button class="btn danger small" data-del>Revoca</button></div>
         <div class="perms">${Object.entries(PERMS).map(([p, d]) =>
           `<label class="check"><input type="checkbox" value="${p}" ${k.perms.includes(p) ? "checked" : ""}> ${esc(d)}</label>`).join("")}</div>
+        <div class="row limits">
+          <label class="f">Lavori contemporanei<input type="number" min="1" step="1" data-limit="max_jobs" value="${k.max_jobs ?? ""}" placeholder="senza limite"></label>
+          <label class="f">MB al giorno<input type="number" min="1" step="1" data-limit="max_daily_mb" value="${k.max_daily_mb ?? ""}" placeholder="senza limite"></label>
+        </div>
       </div>`).join("") : `<p class="note">Nessuna chiave per ora.</p>`;
   } catch (e) { if (e.status === 401) return start(); $("#listErr").textContent = e.message; }
 }
@@ -210,12 +222,13 @@ $("#createForm").onsubmit = async e => {
   const perms = checked($("#newPerms"));
   if (!perms.length) return $("#createErr").textContent = "Scegli almeno un permesso";
   try {
-    const k = await call("POST", "admin/api/keys", {name: $("#name").value, perms});
+    const lim = id => $(id).value.trim() ? Number($(id).value) : null;
+    const k = await call("POST", "admin/api/keys", {name: $("#name").value, perms, max_jobs: lim("#maxJobs"), max_daily_mb: lim("#maxMb")});
     $("#newKey").textContent = k.key;
     const base = location.href.replace(/admin\/?(#.*)?$/, "");
     $("#example").textContent = `curl -H "apikey: ${k.key}" -F file=@relazione.docx -F target=pdf ${base}api/jobs`;
     $("#created").classList.remove("hidden");
-    $("#name").value = ""; permBoxes($("#newPerms"), [], "new"); load();
+    $("#name").value = ""; $("#maxJobs").value = ""; $("#maxMb").value = ""; permBoxes($("#newPerms"), [], "new"); load();
   } catch (err) { $("#createErr").textContent = err.message; }
 };
 $("#copy").onclick = async () => {
@@ -233,7 +246,9 @@ $("#keys").onclick = async e => {
 };
 $("#keys").onchange = async e => {
   const box = e.target.closest(".key"); if (!box) return;
-  try { await call("PUT", "admin/api/keys/" + box.dataset.id, {perms: checked(box)}); }
+  const lim = e.target.dataset.limit;
+  const body = lim ? {[lim]: e.target.value.trim() ? Number(e.target.value) : null} : {perms: checked(box.querySelector(".perms"))};
+  try { await call("PUT", "admin/api/keys/" + box.dataset.id, body); }
   catch (err) { $("#listErr").textContent = err.message; load(); }
 };
 

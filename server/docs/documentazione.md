@@ -134,7 +134,10 @@ Le impostazioni si scrivono in `.env`, nella cartella principale del progetto (p
 | `CONVERTER_ADMIN_PASSWORD` | vuoto | Password della pagina `/admin` per le [chiavi API](#chiavi-api). In alternativa si scrive nel file `/work/data/admin-password`. Senza password l'area admin resta disattivata. |
 | `API_REQUIRE_KEY` | `false` | Valore iniziale dell'interruttore *Chiave obbligatoria per le API*; poi conta quello salvato nella pagina `/admin`. |
 | `CONVERTER_ADMIN_LOGIN` | `true` | Valore iniziale dell'interruttore *Password per entrare in questa pagina*. |
-| `PLICO_URL` | *(vuota)* | Indirizzo di un'istanza di [Plico](https://github.com/EmaLau/plico) come la raggiunge il browser (`http://nas:30128`), oppure solo `:30128` per lo stesso host su un'altra porta. Se impostata, la pagina mostra la scheda *Altri strumenti PDF in Plico*. |
+| `PLICO_URL` | *(vuota)* | Indirizzo di un'istanza di [Plico](https://github.com/EmaLau/plico) come la raggiunge il browser (`http://nas:30128`), oppure solo `:30128` per lo stesso host su un'altra porta. Se impostata, la pagina mostra la scheda *Altri strumenti PDF in Plico* e i risultati PDF hanno il pulsante *Apri in Plico* (in Plico servono `CONVERTER_URL` e `CONVERTER_API_KEY`). |
+| `WEBHOOK_SECRET` | *(vuota)* | Firma i webhook: `X-Converter-Signature: sha256=<HMAC-SHA256 del corpo>`. |
+| `WEBHOOK_HOSTS` | *(vuota)* | Host ammessi in `callback_url`, separati da virgole (`n8n.lan, paperless`). Vuota = qualsiasi host. |
+| `METRICS` | `true` | `false` spegne `GET /metrics`. |
 | `DATA_DIR` | `/work/data` | Cartella delle chiavi API e delle impostazioni dell'area admin. |
 | `CONVERTER_CPUS` | `4` | CPU massime del container. |
 | `CONVERTER_MEMORY` | `4G` | Memoria massima del container. |
@@ -214,6 +217,7 @@ Le chiavi si creano nella pagina `/admin`, sul modello di Gokapi. Per attivarla 
 - La pagina web non ha bisogno della chiave: quando la apri riceve un cookie di sessione firmato.
 - L'interruttore **Chiave obbligatoria per le API** (spento di base) rifiuta con `401` le chiamate senza chiave fatte fuori dalla pagina web. Da spento, le chiamate senza chiave sono accettate come prima, mentre quelle con una chiave rispettano i suoi permessi.
 - L'interruttore **Password per entrare in questa pagina** si può spegnere, ma allora chiunque raggiunga il servizio può gestire le chiavi.
+- **Limiti per chiave** (facoltativi, nella pagina `/admin`): *lavori contemporanei* (in coda o in corso) e *MB al giorno* caricati. Oltre il limite la chiamata riceve `429`; la pagina mostra l'uso di oggi e i lavori in corso di ogni chiave. L'uso si conta in memoria, per giorno locale, e riparte da zero dopo un riavvio. La pagina web (sessione, senza chiave) non è mai limitata.
 - Protezioni dell'area admin: cookie firmato valido 12 ore (`SameSite=Strict`), 5 tentativi sbagliati per indirizzo IP in 10 minuti, poi `429`; le modifiche richiedono l'intestazione `X-Requested-With`.
 
 ```bash
@@ -225,6 +229,7 @@ curl -H "apikey: uconv_..." -F file=@relazione.docx -F target=pdf http://localho
 | Metodo | Percorso | Descrizione |
 |---|---|---|
 | `GET` | `/healthz` | Stato del servizio |
+| `GET` | `/metrics` | Metriche per Prometheus |
 | `GET` | `/api/formats` | Formati e combinazioni supportate |
 | `GET` | `/api/plan/{src}/{dst}` | Passaggi previsti per una conversione |
 | `POST` | `/api/jobs` | Crea un lavoro caricando un file |
@@ -284,6 +289,7 @@ Richiesta `multipart/form-data` con i campi:
 | `file` | sì | Il file da convertire. Il formato di partenza si ricava dall'estensione del nome. |
 | `target` | sì | Estensione di arrivo, per esempio `pdf`. |
 | `meta` | no | Testo libero (al massimo 2.000 caratteri) restituito nello stato del lavoro: utile per chi integra il servizio. |
+| `callback_url` | no | Webhook: un indirizzo `http`/`https` chiamato con `POST` quando il lavoro finisce (vedi *Webhook*). |
 
 Risposta `201` con lo stato del lavoro (vedi sotto). Errori:
 
@@ -291,6 +297,7 @@ Risposta `201` con lo stato del lavoro (vedi sotto). Errori:
 |---|---|
 | `400` | Conversione non supportata, oppure file vuoto |
 | `413` | File più grande di `MAX_UPLOAD_GB` |
+| `429` | Raggiunto un limite della chiave API (lavori contemporanei o MB al giorno) |
 | `503` | Troppi lavori in memoria (`MAX_QUEUE`): riprova tra poco |
 
 Gli errori hanno sempre la forma `{"detail": "messaggio"}`. I messaggi sono in italiano; con `Accept-Language: en` (o un'altra lingua diversa dall'italiano) errori, passaggi e note dei lavori arrivano in inglese, con l'intestazione `Content-Language`. Senza intestazione non cambia niente.
@@ -337,6 +344,35 @@ Campi del form: `ids`, gli id dei lavori separati da virgole (al massimo 200), e
 
 Cancella subito il lavoro e i suoi file. Se è ancora in corso, lo interrompe. Risponde `{"ok": true}`.
 
+## Webhook
+
+Con `callback_url` in `POST /api/jobs` o `POST /api/pdf/{tool}`, il server chiama quell'indirizzo quando il lavoro finisce, così il client non deve controllare lo stato di continuo:
+
+- `POST` con `Content-Type: application/json`; il corpo è lo stato del lavoro, lo stesso di `GET /api/jobs/{id}`, nella lingua della richiesta che l'ha creato.
+- `X-Converter-Event: job.done` o `job.error`; con `WEBHOOK_SECRET`, `X-Converter-Signature: sha256=<HMAC-SHA256 del corpo>`.
+- Tre tentativi (subito, dopo 5 e dopo 30 secondi), 10 secondi di timeout ciascuno, redirect non seguiti; una risposta `4xx` ferma i tentativi.
+- Lo stato del lavoro mostra l'esito in `webhook`: `pending`, `ok` o l'ultimo errore.
+- `WEBHOOK_HOSTS` limita gli host chiamabili; senza, è ammesso qualsiasi indirizzo raggiungibile dal server: dai le chiavi API solo a client fidati.
+
+Controllo della firma in Python:
+
+```python
+import hashlib, hmac
+atteso = "sha256=" + hmac.new(SEGRETO.encode(), corpo_richiesta, hashlib.sha256).hexdigest()
+assert hmac.compare_digest(atteso, intestazioni["X-Converter-Signature"])
+```
+
+## `GET /metrics`
+
+Metriche per Prometheus dall'avvio del servizio; non serve la chiave (`METRICS=false` la spegne). `uconv_jobs_finished_total{kind,state}` (kind = `convert` o uno strumento PDF), `uconv_job_duration_seconds_total{kind}`, `uconv_jobs{state}` (in coda, in corso, conservati), `uconv_upload_bytes_total`, `uconv_webhooks_total{result}`, `uconv_rejected_total{reason}` (limiti delle chiavi), `uconv_info{version}`. Nomi dei file e id dei lavori non vengono mai esposti.
+
+```yaml
+scrape_configs:
+  - job_name: universal-converter
+    static_configs:
+      - targets: ["converter:8080"]
+```
+
 ## `GET /api/pdf`
 
 Gli strumenti PDF disponibili con le loro opzioni (nome, tipo, valore predefinito, scelte), nel formato usato dalla pagina web. Uno strumento il cui programma manca (per esempio `ocrmypdf` fuori dal container) non compare.
@@ -354,6 +390,7 @@ Avvia uno strumento PDF: `merge`, `split`, `extract`, `remove`, `rotate`, `compr
 | `lang` | `ocr` | Lingue di Tesseract unite da `+` (predefinito `ita+eng`); l'immagine contiene `ita`, `eng` e `osd` |
 | `force` | `ocr` | `true` per rifare l'OCR anche sulle pagine che hanno già testo (di base restano intatte) |
 | `meta` | tutti | Testo libero restituito nello stato |
+| `callback_url` | tutti | Webhook chiamato alla fine del lavoro (vedi *Webhook*) |
 
 Risponde `201` con lo stato del lavoro, che contiene anche `tool`, `files` e, quando serve, `note` (per esempio "dimensione ridotta del 63%"). Da lì in poi si usano `/api/jobs/{id}` e `/api/jobs/{id}/download` come per le conversioni. Errori: `400` per opzioni sbagliate, file non PDF o numero di file sbagliato, `404` per uno strumento sconosciuto, `413` e `503` come sopra. Le pagine che non esistono (`9-12` in un PDF di 10 pagine) fanno finire il lavoro in `error`.
 

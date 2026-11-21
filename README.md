@@ -34,7 +34,8 @@
 - **JSON API** for scripts and other applications, with **API keys** (per-function permissions, revocable, managed on the `/admin` page) and interactive docs at `/apidocs`.
 - **Nextcloud app** (optional): right-click a file → **Converti in ▸ format** ("Convert to"), and the result appears next to the original.
 - **Automatic PDFs** (optional) next to Xournal++ notes and Office documents in Nextcloud.
-- **Robust**: a queue with a limit on concurrent conversions, timeouts, a size limit on generated files, automatic cleanup.
+- **Integrations**: webhooks when a job ends (signed with HMAC), limits per API key (concurrent jobs, MB per day), Prometheus metrics at `/metrics`, and the sister project [Plico](https://github.com/EmaLau/plico) for advanced PDF tools: *Open in Plico* on every PDF result.
+- **Robust**: a queue with a limit on concurrent conversions, timeouts, a size limit on generated files, automatic cleanup, and a malformed-file test that runs on every image.
 
 | Category | Some formats |
 |---|---|

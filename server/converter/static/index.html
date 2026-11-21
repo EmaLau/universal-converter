@@ -66,6 +66,7 @@ a.tool{text-decoration:none;color:inherit}
 .btn{background:var(--accent);color:#fff;border:0;border-radius:12px;padding:14px 28px;font-size:17px;font-weight:600;cursor:pointer;box-shadow:0 4px 14px color-mix(in srgb,var(--accent) 30%,transparent)}
 .btn:hover{background:var(--accent-hover)}
 .btn:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
+a.btn{text-decoration:none;display:inline-block}
 .btn.small{padding:8px 16px;font-size:14px;border-radius:10px;box-shadow:none}
 .btn.ghost{background:var(--surface-2);color:var(--text);box-shadow:none}
 .btn.ghost:hover{background:var(--line)}
@@ -301,7 +302,10 @@ function renderFiles(){
     else if(it.state==="queued") meta=el("span",{},`In coda${it.position>1?` (posizione ${it.position})`:""}…`);
     else if(it.state==="running") meta=el("span",{},it.step||"Conversione…");
     else meta=el("span",{},fmtSize(it.file.size));
-    if(it.state==="done") right=el("a",{class:"dl",href:`api/jobs/${it.job}/download`,download:it.out_name},"Scarica");
+    if(it.state==="done"){ right=el("a",{class:"dl",href:`api/jobs/${it.job}/download`,download:it.out_name},"Scarica");
+      // risultato PDF e Plico collegato: Plico lo prende dal convertitore (con la sua chiave) senza riscaricarlo
+      if(plicoUrl() && /\.pdf$/i.test(it.out_name||"")) right=el("span",{class:"actions"},
+        el("a",{class:"btn small ghost",href:`${plicoUrl()}/#from-converter=${it.job}`,target:"_blank",rel:"noopener"},"Apri in Plico"), right); }
     else if(it.state==="error" && it.sources) right=el("button",{class:"btn small ghost",onclick:()=>{it.sources.forEach(s=>s.state="ready");items=items.filter(x=>x!==it);renderFiles();}},"Riprova");
     else if(it.state==="error" && !it.fatal) right=el("button",{class:"btn small ghost",onclick:()=>{it.state="ready";renderFiles();}},"Riprova");
     else if(it.state==="error") right="";

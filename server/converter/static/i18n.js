@@ -78,6 +78,8 @@ const UC_I18N = (() => {
     "Nessuna chiave per ora.": "No keys yet.", "Scegli almeno un permesso": "Choose at least one permission",
     "Formati e piani di conversione": "Formats and conversion plans", "Avviare conversioni e strumenti PDF": "Start conversions and PDF tools",
     "Stato, download e cancellazione dei lavori": "Job status, download and deletion",
+    "Lavori contemporanei": "Concurrent jobs", "MB al giorno": "MB per day", "senza limite": "no limit",
+    "Apri in Plico": "Open in Plico",
     "Attivo: ogni chiamata fatta fuori dalla pagina web deve avere una chiave. La pagina web continua a funzionare.":
       "On: every call made outside the web page needs a key. The web page keeps working.",
     "Disattivo: le chiamate senza chiave sono accettate. Le chiavi limitano comunque cosa può fare ogni script.":
@@ -101,6 +103,7 @@ const UC_I18N = (() => {
     [/^In coda \(posizione (\d+)\)…$/, "Queued (position $1)…"],
     [/^file troppo grande \(massimo (.+)\)$/, "file too large (maximum $1)"],
     [/^I file vengono elaborati su questo server e cancellati dopo (\d+) ore$/, "Files are processed on this server and deleted after $1 hours"],
+    [/^Oggi: (.+) MB · in corso: (\d+)$/, "Today: $1 MB · in progress: $2"],
     [/^Creata (.+) · ultimo uso: mai$/, "Created $1 · last used: never"],
     [/^Creata (.+) · ultimo uso: (.+)$/, "Created $1 · last used: $2"],
     [/^(.+) · Convertitore$/, m => tr(m[1]) + " · Converter"],
