@@ -2,7 +2,7 @@
 
 Where Universal Converter is going. Released changes are in [CHANGELOG.md](CHANGELOG.md); ideas and requests are welcome as [issues](https://github.com/EmaLau/universal-converter/issues/new/choose).
 
-**Current version:** 2.6.0 (November 2026): ~200 formats, PDF tools with OCR, API keys, ready-made Docker image, Nextcloud app, web interface in English and Italian, image for amd64 and arm64, conversion options and presets, previews, installable app, PDF slides to PowerPoint, PDF tables, web pages as articles, transcription, batch conversions, automatic OCR, substitute fonts, subtitles, email and Graphviz.
+**Current version:** 2.6.1 (November 2026): ~200 formats, PDF tools with OCR, API keys, ready-made Docker image, Nextcloud app, web interface in English and Italian, image for amd64 and arm64, conversion options and presets, previews, installable app, PDF slides to PowerPoint, PDF tables, web pages as articles, transcription, batch conversions, automatic OCR, substitute fonts, subtitles, email and Graphviz.
 
 ## 2.2 — an English interface
 

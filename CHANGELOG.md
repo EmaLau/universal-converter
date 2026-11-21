@@ -5,6 +5,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.6.1] - 2026-11-21
+
+### Changed
+- **New icons** on the web page: pictograms instead of abbreviations (a page for documents, a grid for spreadsheets,
+  a wave for audio, play for video, a zipper for archives, an envelope for email, connected nodes for diagrams, and
+  one for each PDF tool). Conversion cards show the source pictogram with a small label of the target format
+  (e.g. a page with *PDF*), files and recent conversions show the pictogram with their own format. One inline SVG
+  sprite, no external files.
+- **New app icon** (favicon, header, installable app, Apple touch icon, maskable icon): the two arrows redrawn with
+  thicker strokes, readable at 16 pixels too.
+- PDF files now use the PDF red everywhere (before they were blue like documents in the file list).
+
 ## [2.6.0] - 2026-11-21
 
 ### Added

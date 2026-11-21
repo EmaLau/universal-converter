@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#4f46e5">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Converter">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%234f46e5'/%3E%3Cpath d='M7 9h8l-2.5-2.5M17 15H9l2.5 2.5' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%234f46e5'/%3E%3Cstop offset='1' stop-color='%2306b6d4'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='15' fill='url%28%23g%29'/%3E%3Cpath d='M17 25h27l-7-7M47 39H20l7 7' stroke='%23fff' stroke-width='5.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
 :root{
   --bg:#f6f7fb; --surface:#fff; --surface-2:#eef0f6; --text:#171a2b; --muted:#646b85; --line:#e2e5ef;
@@ -55,7 +55,9 @@ h1{font-size:clamp(26px,4.5vw,40px);line-height:1.1;margin:8px 0 10px;text-align
 .tool{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;cursor:pointer;text-align:left;box-shadow:var(--shadow);transition:transform .12s,border-color .12s;display:flex;flex-direction:column;gap:8px;min-height:132px}
 .tool:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 10px 28px color-mix(in srgb,var(--accent) 18%,transparent)}
 .tool:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.tool .ic{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:12px;letter-spacing:.02em}
+.tool .ic{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:12px;letter-spacing:.02em;position:relative}
+.pic{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ic .pill,.badge .pill{position:absolute;right:-7px;bottom:-6px;font-size:8.5px;font-weight:800;line-height:1;padding:2px 4px;border-radius:5px;border:2px solid var(--surface);color:#fff;letter-spacing:.02em;text-transform:uppercase}
 .tool b{font-size:16px}
 .tool span{color:var(--muted);font-size:13px}
 .tool.any{border-style:dashed;border-width:2px}
@@ -78,7 +80,7 @@ a.btn{text-decoration:none;display:inline-block}
 .drop p{color:var(--muted);margin:12px 0 0;font-size:14px}
 .files{display:flex;flex-direction:column;gap:10px;margin-top:18px}
 .file{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center}
-.badge{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:11px;text-transform:uppercase;overflow:hidden}
+.badge{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:11px;text-transform:uppercase;position:relative;flex:none}
 .fname{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fmeta{color:var(--muted);font-size:13px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .fmeta .err{color:var(--err)}
@@ -121,6 +123,7 @@ select{background:var(--surface-2);border:1px solid var(--line);border-radius:10
 .recent .sub{color:var(--muted);font-size:12.5px;margin:2px 0 8px}
 .rrow{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
 .rrow .badge{width:36px;height:36px;font-size:10px}
+.rrow .badge .pic{width:18px;height:18px}
 .linkbtn{background:none;border:0;color:var(--muted);cursor:pointer;font-size:13px;padding:4px}
 .linkbtn:hover{color:var(--text);text-decoration:underline}
 .pv{grid-column:1/-1;background:var(--surface-2);border-radius:10px;padding:10px;text-align:center}
@@ -145,9 +148,11 @@ select{background:var(--surface-2);border:1px solid var(--line);border-radius:10
 </style>
 </head>
 <body>
+<!-- pittogrammi delle schede e dei file (stile: tratto bianco su quadrato colorato) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><symbol id="i-doc" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h6"/></symbol><symbol id="i-sheet" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M4 15h16M10 4v16"/></symbol><symbol id="i-slide" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M12 16v4M8 20h8"/><path d="M7.5 12.5l3-3 2 2 4-4"/></symbol><symbol id="i-draw" viewBox="0 0 24 24"><path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 6l3 3"/></symbol><symbol id="i-img" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 8"/></symbol><symbol id="i-audio" viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></symbol><symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z" fill="currentColor"/></symbol><symbol id="i-sub" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 12.5h3.5M13 12.5h4M7 15.5h10"/></symbol><symbol id="i-book" viewBox="0 0 24 24"><path d="M12 6.5C10 5 7 4.5 4 4.5v13c3 0 6 .5 8 2 2-1.5 5-2 8-2v-13c-3 0-6 .5-8 2z"/><path d="M12 6.5v13"/></symbol><symbol id="i-data" viewBox="0 0 24 24"><path d="M8.5 4C6.5 4 6 5 6 7v2c0 1.6-.8 3-2 3 1.2 0 2 1.4 2 3v2c0 2 .5 3 2.5 3M15.5 4c2 0 2.5 1 2.5 3v2c0 1.6.8 3 2 3-1.2 0-2 1.4-2 3v2c0 2-.5 3-2.5 3"/></symbol><symbol id="i-font" viewBox="0 0 24 24"><path d="M3 19L8 6l5 13M5 14.5h6"/><circle cx="17.5" cy="16" r="2.8"/><path d="M20.3 12.5V19"/></symbol><symbol id="i-arch" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M12 3v1.5M12 6.5v1.5M12 10v1.5"/><rect x="10.5" y="13.5" width="3" height="4" rx="1"/></symbol><symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 7l8.5 6 8.5-6"/></symbol><symbol id="i-graph" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="10" cy="18" r="2.5"/><path d="M8.4 6.4l7.2 1.2M6.8 8.4l2.4 7.2M16.6 10.1l-5.2 5.8"/></symbol><symbol id="i-wave" viewBox="0 0 24 24"><path d="M3 12h1M6 9v6M9 6v12M12 10v4"/><path d="M15 9h6M15 12h6M15 15h4"/></symbol><symbol id="i-any" viewBox="0 0 24 24"><path d="M5 9h13l-3.5-3.5M19 15H6l3.5 3.5"/></symbol><symbol id="i-merge" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="8" rx="1"/><rect x="14" y="3" width="7" height="8" rx="1"/><path d="M6.5 11v2.5L12 17l5.5-3.5V11M12 17v4"/></symbol><symbol id="i-split" viewBox="0 0 24 24"><circle cx="6" cy="7" r="2.5"/><circle cx="6" cy="17" r="2.5"/><path d="M8 8.6L20 18M8 15.4L20 6"/></symbol><symbol id="i-extract" viewBox="0 0 24 24"><path d="M13 3H6v18h12V8z"/><path d="M13 3v5h5"/><path d="M9 14h6M12 11l3 3-3 3"/></symbol><symbol id="i-remove" viewBox="0 0 24 24"><path d="M13 3H6v18h12V8z"/><path d="M13 3v5h5"/><path d="M9 15h6"/></symbol><symbol id="i-rotate" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 11-2.2-5.3"/><path d="M19.5 4v4h-4"/></symbol><symbol id="i-compress" viewBox="0 0 24 24"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></symbol><symbol id="i-ocr" viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 011-1h3M16 4h3a1 1 0 011 1v3M20 16v3a1 1 0 01-1 1h-3M8 20H5a1 1 0 01-1-1v-3"/><path d="M8 10h8M8 14h5"/></symbol><symbol id="i-plico" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><path d="M16.5 13.5v6M13.5 16.5h6"/></symbol><symbol id="i-imgs" viewBox="0 0 24 24"><rect x="7" y="3" width="14" height="11" rx="1.5"/><path d="M3 7v12a2 2 0 002 2h12"/><circle cx="12" cy="7.5" r="1.4"/><path d="M21 12l-4-4-6 6"/></symbol></svg>
 <header><div class="bar">
   <div class="logo" id="home" title="Tutti gli strumenti">
-    <svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent-2)"/></linearGradient></defs><rect width="24" height="24" rx="6" fill="url(#lg)"/><path d="M7 9h8l-2.5-2.5M17 15H9l2.5 2.5" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <svg width="30" height="30" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent-2)"/></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#lg)"/><path d="M17 25h27l-7-7M47 39H20l7 7" stroke="#fff" stroke-width="5.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
     Convertitore
   </div>
   <div class="sp"></div>
@@ -240,11 +245,20 @@ const TOOLS = [
 ];
 const $ = s => document.querySelector(s);
 let F = {inputs:{},categories:{}}, P = [], tool = null, ptool = null, items = [], nextId = 1;
-const PDF_ICON = {merge:"1+2",split:"1÷2",extract:"PAG",remove:"−PAG",rotate:"↻",compress:"KB↓",ocr:"OCR"};
+const PDF_ICON = {merge:"merge",split:"split",extract:"extract",remove:"remove",rotate:"rotate",compress:"compress",ocr:"ocr"};
+// pittogramma di ogni categoria (e di qualche formato) per schede, file e conversioni recenti
+const CAT_PIC = {"Documento":"doc","Foglio di calcolo":"sheet","Presentazione":"slide","Disegno":"draw","Immagine":"img","Audio":"audio","Video":"video","Sottotitoli":"sub","Ebook":"book","Dati":"data","Font":"font","Archivio":"arch"};
+const EXT_PIC = {eml:"mail",msg:"mail",gv:"graph"};
+const picOf = e => EXT_PIC[e] || CAT_PIC[cat(e)] || "doc";
+function pic(name){ const NS="http://www.w3.org/2000/svg", s=document.createElementNS(NS,"svg"), u=document.createElementNS(NS,"use");
+  s.setAttribute("class","pic"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); u.setAttribute("href","#i-"+name); s.append(u); return s; }
+const short = e => label(e).replace(/^TAR\./,"").slice(0,4);
+// quadrato con il pittogramma; "pill" = etichetta del formato (di arrivo nelle schede, del file nella lista)
+function tile(cls, name, bg, pill){ return el("div",{class:cls,style:`background:${bg}`},pic(name), pill?el("span",{class:"pill",style:`background:${color(pill)}`,translate:"no"},short(pill)):""); }
 
 const label = e => (e||"?").toUpperCase();
 const cat = e => F.categories[e] || "Documento";
-const color = e => `var(${CAT_COLOR[cat(e)]||"--c-doc"})`;
+const color = e => e==="pdf" ? "var(--c-pdf)" : `var(${CAT_COLOR[cat(e)]||"--c-doc"})`;
 const ALIAS = {jpeg:"jpg",jfif:"jpg",tif:"tiff",htm:"html",markdown:"md",tgz:"tar.gz",tbz2:"tar.bz2",txz:"tar.xz",heif:"heic"};
 function extOf(name){ const l=name.toLowerCase(); for(const c of ["tar.gz","tar.bz2","tar.xz"]) if(l.endsWith("."+c)) return c;
   const e=l.includes(".")?l.split(".").pop():""; return ALIAS[e]||e; }
@@ -271,19 +285,25 @@ async function load(){
   const tb=$("#ftable"); for(const [k,srcs] of Object.entries(rows)) tb.append(el("tr",{},el("td",{},srcs.map(label).join(", ")),el("td",{},"→ "+k.split(" ").map(label).join(", "))));
   window.addEventListener("hashchange", route); route();
 }
+// scheda di uno strumento: pittogramma del formato di partenza + etichetta del formato di arrivo
+function toolTile(t, src){
+  const from=t[4]||src[0], to=t[3], c=cat(from);
+  const name = (c==="Audio"||c==="Video") && ["srt","vtt"].includes(to) ? "sub" : (c==="Audio"||c==="Video") && to==="txt" ? "wave" : picOf(from);
+  return tile("ic", name, color(from), to);
+}
 function renderGrid(c){
   const g=$("#grid"); g.replaceChildren();
-  if(c==="Tutti") g.append(el("button",{class:"tool any",onclick:()=>openTool(null)},el("div",{class:"ic"},"ANY"),el("b",{},"Qualsiasi formato"),el("span",{},"Carica un file e scegli in cosa convertirlo")));
+  if(c==="Tutti") g.append(el("button",{class:"tool any",onclick:()=>openTool(null)},tile("ic","any",""),el("b",{},"Qualsiasi formato"),el("span",{},"Carica un file e scegli in cosa convertirlo")));
   if(c==="Tutti"||c==="PDF") P.forEach(t=>g.append(el("button",{class:"tool",onclick:()=>{location.hash="pdf="+t.name;}},
-    el("div",{class:"ic",style:"background:var(--c-pdf);font-size:"+(t.name==="rotate"?"20px":"12px")},PDF_ICON[t.name]||"PDF"),el("b",{},t.title),el("span",{},t.description))));
+    tile("ic",PDF_ICON[t.name]||"doc","var(--c-pdf)"),el("b",{},t.title),el("span",{},t.description))));
   if((c==="Tutti"||c==="PDF") && plicoUrl()) g.append(el("a",{class:"tool plico",href:plicoUrl(),target:"_blank",rel:"noopener"},
-    el("div",{class:"ic"},"+27"),el("b",{},"Altri strumenti PDF in Plico"),el("span",{},"Firma, oscura, proteggi, filigrana, PDF/A, confronta e altro")));
+    tile("ic","plico",""),el("b",{},"Altri strumenti PDF in Plico"),el("span",{},"Firma, oscura, proteggi, filigrana, PDF/A, confronta e altro")));
   if((c==="Tutti"||c==="PDF") && plicoUrl()) g.append(el("a",{class:"tool plico",href:plicoUrl()+"/#estraiimg",target:"_blank",rel:"noopener"},
-    el("div",{class:"ic"},"IMG"),el("b",{},"Immagini da un PDF"),el("span",{},"Le immagini originali in uno ZIP, in Plico")));
+    tile("ic","imgs",""),el("b",{},"Immagini da un PDF"),el("span",{},"Le immagini originali in uno ZIP, in Plico")));
   if(c==="PDF") return;
   TOOLS.forEach((t,i)=>{ const src=toolSources(t); if(!src.some(s=>(F.inputs[s]||[]).includes(t[3]))) return;
     if(c!=="Tutti" && cat(src[0])!==c) return;
-    g.append(el("button",{class:"tool",onclick:()=>openTool(i)},el("div",{class:"ic",style:`background:${color(t[4]||(t[3]==="pdf"?src[0]:t[3]))}`},label(t[4]||(t[3]==="pdf"?src[0]:t[3])).slice(0,4)),el("b",{},t[0]),el("span",{},t[1]))); });
+    g.append(el("button",{class:"tool",onclick:()=>openTool(i)},toolTile(t,src),el("b",{},t[0]),el("span",{},t[1]))); });
 }
 // indirizzo di Plico per il browser: ":30128" = stesso host del convertitore, su un'altra porta
 function plicoUrl(){ const u=(F.plico_url||"").trim(); if(!u) return "";
@@ -405,7 +425,7 @@ function renderFiles(){
     const p = it.state==="uploading" ? (it.up||0) : it.state==="running" ? it.progress : null;
     const bar = busy ? el("div",{class:"prog"+(p==null?" ind":"")},el("i",{style:p!=null?`width:${Math.round(p*100)}%`:""})) : "";
     box.append(el("div",{class:"file"},
-      el("div",{class:"badge",style:`background:${color(it.ext)}`},(it.ext||"?").slice(0,4)),
+      it.ext ? tile("badge",picOf(it.ext),color(it.ext),it.ext) : el("div",{class:"badge",style:`background:${color(it.ext)}`},"?"),
       el("div",{style:"min-width:0"},el("div",{class:"fname",title:(it.dir?it.dir+"/":"")+it.file.name,translate:"no"},it.dir?el("span",{class:"fdir"},it.dir+"/"):"",it.file.name),el("div",{class:"fmeta"},meta),bar),
       el("div",{class:"actions"},right, busy?"":el("button",{class:"x",title:"Rimuovi","aria-label":"Rimuovi",onclick:()=>{items=items.filter(x=>x!==it);renderFiles();}},"×")),
       it.state==="done"&&it.showPv ? previewBox(it.job, it.preview, it) : ""));
@@ -514,7 +534,7 @@ function renderHistory(){
     acts.push(el("a",{class:"dl",href:`api/jobs/${x.job}/download`,download:x.out},"Scarica"));
     acts.push(el("button",{class:"x",title:"Rimuovi","aria-label":"Rimuovi",onclick:()=>{saveHistory(loadHistory().filter(y=>y.job!==x.job));renderHistory();}},"×"));
     box.append(el("div",{class:"rrow"},
-      el("div",{class:"badge",style:`background:${color(ext)}`},(ext||"?").slice(0,4)),
+      ext ? tile("badge",picOf(ext),color(ext),ext) : el("div",{class:"badge",style:`background:${color(ext)}`},"?"),
       el("div",{style:"min-width:0"},el("div",{class:"fname",title:x.out,translate:"no"},x.out),
         el("div",{class:"fmeta"},el("span",{translate:"no"},x.name),el("span",{},"· "+fmtSize(x.size)+" · "+fmtTime(x.at)))),
       el("div",{class:"actions"},acts),

@@ -95,6 +95,10 @@ def test_cards(page):
                  "Diagrammi in SVG", "Immagini da un PDF", "Altri strumenti PDF in Plico"):
         assert name in cards, name
     assert page.locator("a.tool[href$='#estraiimg']").count() == 1
+    # 2.6.1: ogni scheda ha un pittogramma; le conversioni hanno l'etichetta del formato di arrivo
+    assert page.locator("#grid .tool .ic svg.pic").count() == page.locator("#grid .tool").count()
+    assert page.locator("#grid .tool", has_text="PDF in PowerPoint").locator(".pill").inner_text() == "PPTX"
+    assert page.locator("#grid .tool", has_text="Word in PDF").locator(".pill").inner_text() == "PDF"
 
 
 def test_convert_and_download_all_keeps_folders(page, server, tmp_path):
@@ -124,6 +128,7 @@ def test_menus_and_options(page):
     assert any(t.startswith("Ogni file in PDF") for t in menus[0])  # conversione in blocco
     assert any("PPTX" in t for t in menus[1])
     assert page.locator("#files .fname").nth(2).inner_text() == "schema.gv"  # .dot di Graphviz riconosciuto
+    assert page.locator("#files .badge .pill").all_inner_texts() == ["ZIP", "PDF", "GV", "MOV"]
     # PDF -> Word: Impaginazione; video -> MP4: sottotitoli da aggiungere
     page.locator("#files select").nth(1).select_option("docx")
     expect(page.locator("#copts")).to_contain_text("Impaginazione")

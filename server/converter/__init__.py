@@ -1,3 +1,3 @@
 """Universal Converter: converte documenti, immagini, audio, video, ebook e archivi in locale."""
 
-__version__ = "2.6.0"
+__version__ = "2.6.1"
