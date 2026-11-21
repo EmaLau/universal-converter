@@ -5,6 +5,9 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Nextcloud app 1.1.1: screenshots on the App Store (no code changes).
+
 ## [2.2.1] - 2026-11-21
 
 ### Added

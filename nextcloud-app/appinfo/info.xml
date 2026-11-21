@@ -28,7 +28,7 @@
 
     occ config:app:set universal_converter converter_url --value=http://indirizzo-del-convertitore:8080
     occ config:app:set universal_converter converter_api_key --value=uconv_...]]></description>
-	<version>1.1.0</version>
+	<version>1.1.1</version>
 	<licence>agpl</licence>
 	<author homepage="https://github.com/EmaLau">EmaLau</author>
 	<namespace>UniversalConverter</namespace>
