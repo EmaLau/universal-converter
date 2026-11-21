@@ -14,6 +14,17 @@
 ![Nextcloud](https://img.shields.io/badge/Nextcloud-30--36-0082C9?logo=nextcloud&logoColor=white)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-home-dark.png">
+    <img src="docs/screenshot-home.png" width="900" alt="Universal Converter home page: ready-made tools and PDF tools">
+  </picture>
+</p>
+
+| Several files at once | PDF tools | Nextcloud: right click → Convert to… |
+|---|---|---|
+| ![Four files converted to PDF, WEBP and XLSX](docs/screenshot-convert.png) | ![Merge PDF with the order arrows](docs/screenshot-pdf-merge.png) | ![The Convert to submenu in Nextcloud Files](docs/screenshot-nextcloud.png) |
+
 ## Features
 
 - **Web page** with ready-made tools ("Word to PDF", "HEIC to JPG", "JSON to Excel"…), drag and drop, and batch conversion of several files at once.
@@ -42,7 +53,7 @@ You need Docker with Docker Compose.
 ```bash
 git clone https://github.com/EmaLau/universal-converter.git
 cd universal-converter
-docker compose pull      # ready-made image from ghcr.io (linux/amd64)
+docker compose pull      # ready-made image from ghcr.io (linux/amd64 and linux/arm64)
 docker compose up -d
 ```
 

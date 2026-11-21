@@ -329,7 +329,7 @@ $("#go").onclick = () => {
   if(!ptool) return ready.forEach(start);
   if(ptool.max_files>1){
     const fd=pdfOptions(new FormData()); ready.forEach(i=>{ fd.append("files",i.file,i.file.name); i.state="used"; });
-    const res={id:nextId++, file:{name:ready[0].file.name.replace(/\.pdf$/i,"")+"-unito.pdf", size:ready.reduce((a,i)=>a+i.file.size,0)}, ext:"pdf", targets:[], sources:ready, state:"uploading"};
+    const res={id:nextId++, file:{name:ready[0].file.name.replace(/\.pdf$/i,"")+(UC_I18N.lang==="en"?"-merged.pdf":"-unito.pdf"), size:ready.reduce((a,i)=>a+i.file.size,0)}, ext:"pdf", targets:[], sources:ready, state:"uploading"};
     items.push(res); send(res, "api/pdf/"+ptool.name, fd); return;
   }
   ready.forEach(it=>{ const fd=pdfOptions(new FormData()); fd.append("files",it.file,it.file.name); send(it, "api/pdf/"+ptool.name, fd); });

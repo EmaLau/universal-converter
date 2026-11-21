@@ -113,3 +113,12 @@ def test_docs_language(client, tmp_path, monkeypatch):
         assert c.get("/docs", headers={"Accept-Language": "en-GB"}).text == "EN"
         assert c.get("/docs?lang=it", headers={"Accept-Language": "en-GB"}).text == "IT"
         assert c.get("/docs?lang=en").text == "EN"
+
+
+def test_result_names():
+    assert i18n.filename("relazione-compresso.pdf", "it") == "relazione-compresso.pdf"
+    assert i18n.filename("relazione-compresso.pdf", "en") == "relazione-compressed.pdf"
+    assert i18n.filename("a-unito.pdf", "en") == "a-merged.pdf"
+    assert i18n.filename("a-diviso.zip", "en") == "a-split.zip"
+    assert i18n.filename("scan-ocr.pdf", "en") == "scan-ocr.pdf"
+    assert i18n.filename("unito", "en") == "unito"

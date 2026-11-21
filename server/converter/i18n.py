@@ -85,6 +85,22 @@ _EN: list[tuple[str, str]] = [
 _TABLE = [(re.compile(f"^{it}$", re.S), en) for it, en in _EN]
 
 
+# suffissi dei file prodotti dagli strumenti PDF (pdftools.py)
+SUFFIXES = {"-unito": "-merged", "-diviso": "-split", "-estratto": "-extracted", "-senza-pagine": "-without-pages",
+            "-ruotato": "-rotated", "-compresso": "-compressed"}
+
+
+def filename(name: str, lang: str) -> str:
+    """'relazione-compresso.pdf' -> 'relazione-compressed.pdf' in inglese."""
+    if lang == "it":
+        return name
+    stem, dot, ext = name.rpartition(".")
+    for it, en in SUFFIXES.items():
+        if dot and stem.endswith(it):
+            return f"{stem[:-len(it)]}{en}.{ext}"
+    return name
+
+
 def pick(accept_language: str | None) -> str:
     """'it' senza intestazione o se la lingua preferita e' l'italiano, altrimenti 'en'."""
     first = (accept_language or "").split(",")[0].strip().lower()

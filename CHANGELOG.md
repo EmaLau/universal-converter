@@ -5,6 +5,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-11-21
+
+### Added
+- **ARM64 image**: `ghcr.io/emalau/universal-converter` is now multi-platform (linux/amd64 and linux/arm64). Each
+  platform is built natively on its own GitHub runner and self-tested before the two are joined in one manifest,
+  so `docker compose pull` works on Raspberry Pi and Apple Silicon too.
+- **Screenshots** in the README and in the Nextcloud app's `info.xml`.
+
+### Changed
+- PDF tool results are named in the language of the request (`report-compressed.pdf` instead of
+  `report-compresso.pdf` with `Accept-Language: en`).
+
 ## [2.2.0] - 2026-11-21
 
 ### Added
@@ -46,7 +58,8 @@ All notable changes to this project are documented here. The format follows
 First public release: about 200 formats and more than 3,000 combinations with chained conversions, web page,
 JSON API, Nextcloud app "Converti in" and automatic PDFs for Nextcloud.
 
-[Unreleased]: https://github.com/EmaLau/universal-converter/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/EmaLau/universal-converter/compare/v2.2.1...HEAD
+[2.2.1]: https://github.com/EmaLau/universal-converter/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/EmaLau/universal-converter/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/EmaLau/universal-converter/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/EmaLau/universal-converter/compare/v1.0.0...v2.0.0

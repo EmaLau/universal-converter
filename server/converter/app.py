@@ -125,16 +125,16 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
         h["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         return resp
 
-    def lang(request: Request) -> str:
+    def lang_of(request: Request) -> str:
         return i18n.pick(request.headers.get("accept-language"))
 
     def error_response(request: Request, exc: JobError) -> JSONResponse:
-        lg = lang(request)
+        lg = lang_of(request)
         return JSONResponse({"detail": i18n.t(str(exc), lg)}, status_code=exc.status, headers={"Content-Language": lg})
 
     def public(request: Request, job) -> dict:
         """Stato del lavoro, con errore, passaggio e nota nella lingua della richiesta."""
-        d, lg = manager.public(job), lang(request)
+        d, lg = manager.public(job), lang_of(request)
         for k in ("error", "step", "note"):
             if d.get(k):
                 d[k] = i18n.t(d[k], lg)
@@ -231,7 +231,7 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
             opts = t.parse({"pages": pages, "angle": angle, "level": level, "lang": lang, "force": force})
         except pdftools.OptionError as e:
             raise JobError(400, str(e)) from None
-        job = await manager.create_tool([(f, f.filename) for f in files], t, opts, meta)
+        job = await manager.create_tool([(f, f.filename) for f in files], t, opts, meta, lang_of(request))
         return public(request, job)
 
     @app.get("/api/jobs/{job_id}", **api)

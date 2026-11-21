@@ -37,6 +37,9 @@
 	<website>https://github.com/EmaLau/universal-converter</website>
 	<bugs>https://github.com/EmaLau/universal-converter/issues</bugs>
 	<repository type="git">https://github.com/EmaLau/universal-converter.git</repository>
+	<screenshot small-thumbnail="https://raw.githubusercontent.com/EmaLau/universal-converter/main/docs/screenshot-nextcloud.png">https://raw.githubusercontent.com/EmaLau/universal-converter/main/docs/screenshot-nextcloud.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/EmaLau/universal-converter/main/docs/screenshot-convert.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/EmaLau/universal-converter/main/docs/screenshot-home.png</screenshot>
 	<dependencies>
 		<nextcloud min-version="30" max-version="36"/>
 	</dependencies>

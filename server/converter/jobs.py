@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
+from . import i18n
 from .config import Settings
 from .formats import ext_of, normalize, safe_filename, stem_of
 from .graph import Graph
@@ -58,6 +59,7 @@ class Job:
     note: str = ""                       # informazione per l'utente sul risultato (es. "ridotto del 40%")
     tool: PdfTool | None = None          # strumento PDF al posto di una conversione
     opts: dict = field(default_factory=dict)
+    lang: str = "it"                    # lingua del nome del risultato (strumenti PDF)
     inputs: list[Path] = field(default_factory=list)  # file caricati per uno strumento PDF
     task: asyncio.Task | None = field(default=None, repr=False)
 
@@ -117,7 +119,7 @@ class JobManager:
         return job
 
     async def create_tool(self, uploads: list[tuple[Upload, str | None]], tool: PdfTool, opts: dict,
-                          meta: str = "") -> Job:
+                          meta: str = "", lang: str = "it") -> Job:
         """Lavoro di uno strumento PDF: uno o piu' file caricati, nell'ordine ricevuto."""
         if not tool.min_files <= len(uploads) <= tool.max_files:
             if tool.max_files == 1:
@@ -131,7 +133,7 @@ class JobManager:
             raise JobError(503, "Troppi lavori in corso: riprova tra poco")
         job_id = uuid.uuid4().hex
         job = Job(id=job_id, dir=self.settings.jobs_dir / job_id, filename=names[0], src_ext="pdf",
-                  target="zip" if tool.name == "split" else "pdf", meta=meta[:2000], tool=tool, opts=opts)
+                  target="zip" if tool.name == "split" else "pdf", meta=meta[:2000], tool=tool, opts=opts, lang=lang)
         job.dir.mkdir(parents=True)
         try:
             for i, (upload, _) in enumerate(uploads, 1):
@@ -242,7 +244,7 @@ class JobManager:
             raise ConvError(str(e)) from None
         if not out.exists() or out.stat().st_size == 0:
             raise ConvError(f"{job.tool.title}: risultato vuoto")
-        job.out_path, job.out_name, job.step = out, safe_filename(name), ""
+        job.out_path, job.out_name, job.step = out, safe_filename(i18n.filename(name, job.lang)), ""
 
     async def _janitor_loop(self) -> None:
         while True:

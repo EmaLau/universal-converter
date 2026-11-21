@@ -14,6 +14,19 @@
 ![Nextcloud](https://img.shields.io/badge/Nextcloud-30--36-0082C9?logo=nextcloud&logoColor=white)
 ![Licenza](https://img.shields.io/badge/licenza-AGPL--3.0-blue)
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-home-dark.png">
+    <img src="docs/screenshot-home.png" width="900" alt="Pagina iniziale di Universal Converter: strumenti pronti e strumenti PDF">
+  </picture>
+</p>
+
+| Più file insieme | Strumenti PDF | Nextcloud: tasto destro → Converti in… |
+|---|---|---|
+| ![Quattro file convertiti in PDF, WEBP e XLSX](docs/screenshot-convert.png) | ![Unisci PDF con le frecce per l'ordine](docs/screenshot-pdf-merge.png) | ![Il sottomenu Converti in di Nextcloud File](docs/screenshot-nextcloud.png) |
+
+Le schermate mostrano l'interfaccia in inglese; con il selettore IT / EN (o un browser in italiano) è tutta in italiano.
+
 ## Funzionalità
 
 - **Pagina web** con strumenti pronti ("Word in PDF", "HEIC in JPG", "JSON in Excel"…), trascinamento e conversione di più file insieme.
@@ -40,7 +53,7 @@ Serve Docker con Docker Compose.
 ```bash
 git clone https://github.com/EmaLau/universal-converter.git
 cd universal-converter
-docker compose pull      # immagine pronta da ghcr.io (linux/amd64)
+docker compose pull      # immagine pronta da ghcr.io (linux/amd64 e linux/arm64)
 docker compose up -d
 ```
 
