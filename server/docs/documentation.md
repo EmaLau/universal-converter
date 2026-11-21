@@ -137,6 +137,7 @@ Settings go in `.env`, in the project's root folder (start from `.env.example`).
 | `DISABLED_CONVERSIONS` | empty | Conversions to hide, comma-separated. Example: `heic>avif,pdf>epub`. |
 | `CONVERTER_ADMIN_PASSWORD` | empty | Password for the `/admin` page that manages [API keys](#api-keys). It can also be written in `/work/data/admin-password`. Without a password the admin area stays disabled. |
 | `API_REQUIRE_KEY` | `false` | Initial value of the *Key required for the API* switch; afterwards the value saved on the `/admin` page wins. |
+| `PLICO_URL` | *(empty)* | Address of a [Plico](https://github.com/EmaLau/plico) instance, as the browser reaches it (`http://nas:30128`), or just `:30128` for the same host on another port. When set, the web page shows a *More PDF tools in Plico* card. |
 | `CONVERTER_ADMIN_LOGIN` | `true` | Initial value of the *Password to enter this page* switch. |
 | `DATA_DIR` | `/work/data` | Folder holding the API keys and admin settings. |
 | `CONVERTER_CPUS` | `4` | Maximum CPUs for the container. |
@@ -209,7 +210,7 @@ Keys are created on the `/admin` page, modelled on Gokapi. To enable it set `CON
   |---|---|
   | `formats` | `GET /api/formats`, `GET /api/plan/{src}/{dst}`, `GET /api/pdf` |
   | `convert` | `POST /api/jobs`, `POST /api/pdf/{tool}` |
-  | `jobs` | `GET /api/jobs/{id}`, `GET /api/jobs/{id}/download`, `DELETE /api/jobs/{id}` |
+  | `jobs` | `GET /api/jobs/{id}`, `GET /api/jobs/{id}/download`, `POST /api/jobs/zip`, `DELETE /api/jobs/{id}` |
 
   A full client, such as the Nextcloud app or Plico, needs all three.
 - The full key is shown **only once**, when it is created: the server keeps only its SHA-256 fingerprint. The page shows the start of the key, when it was created and when it was last used; permissions can be changed and keys revoked.
@@ -235,18 +236,20 @@ curl -H "apikey: uconv_..." -F file=@report.docx -F target=pdf http://localhost:
 | `POST` | `/api/pdf/{tool}` | Start a PDF tool on one or more PDFs |
 | `GET` | `/api/jobs/{id}` | Job status |
 | `GET` | `/api/jobs/{id}/download` | Download the result |
+| `POST` | `/api/jobs/zip` | Download several results as one ZIP |
 | `DELETE` | `/api/jobs/{id}` | Delete a job and its files immediately |
-| `GET` | `/docs` | This documentation (Italian version) |
+| `GET` | `/docs` | This documentation (`?lang=en` or `?lang=it`) |
 | `GET` | `/apidocs` | Interactive API documentation |
 | `GET` | `/admin` | API keys |
 
 ## `GET /healthz`
 
 ```json
-{"ok": true, "version": "2.0.0", "jobs": 3, "running": 1, "queued": 0}
+{"ok": true, "version": "2.2.2", "jobs": 3, "running": 1, "queued": 0,
+ "programs": {"LibreOffice": true, "FFmpeg": true, "Pandoc": true, "...": true}}
 ```
 
-Also used by the Docker healthcheck. It never requires a key.
+Also used by the Docker healthcheck. It never requires a key. `programs` tells which conversion programs are installed: useful when you build a smaller image yourself.
 
 ## `GET /api/formats`
 
@@ -256,7 +259,8 @@ Also used by the Docker healthcheck. It never requires a key.
   "categories": {"pdf": "Documento", "mp3": "Audio", "...": "..."},
   "tools": ["Calibre", "FFmpeg", "ImageMagick", "LibreOffice", "..."],
   "retain_hours": 6.0,
-  "max_upload_bytes": 21474836480
+  "max_upload_bytes": 21474836480,
+  "plico_url": ""
 }
 ```
 
@@ -328,6 +332,10 @@ Returns `404` if the job does not exist: never created, already deleted, expired
 Returns the file with the right name (`Content-Disposition`), accented characters included. Returns `409` if the job has not finished yet.
 
 The result's name is the original file's name with the new extension: `Final report.docx` → `Final report.pdf`. If the result contains several files, for example the pages of a PDF converted to images, you get a ZIP.
+
+## `POST /api/jobs/zip`
+
+Form fields: `ids`, the job ids separated by commas (at most 200), and optionally `lang` (`en` or `it`, for the ZIP name). Returns one ZIP (`converted.zip`, or `convertiti.zip` in Italian) with the results of the finished jobs; jobs that are not ready or no longer exist are skipped, and two results with the same name become `photo.jpg` and `photo (2).jpg`. `404` if none is ready. Permission: `jobs`. The web page uses it for *Download all*.
 
 ## `DELETE /api/jobs/{id}`
 

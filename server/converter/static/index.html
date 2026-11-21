@@ -55,6 +55,9 @@ h1{font-size:clamp(26px,4.5vw,40px);line-height:1.1;margin:8px 0 10px;text-align
 .tool span{color:var(--muted);font-size:13px}
 .tool.any{border-style:dashed;border-width:2px}
 .tool.any .ic{background:linear-gradient(135deg,var(--accent),var(--accent-2))}
+a.tool{text-decoration:none;color:inherit}
+.tool.plico{border-style:dashed}
+.tool.plico .ic{background:#7c3aed}
 /* workspace */
 .back{background:none;border:0;color:var(--muted);cursor:pointer;padding:4px 0;margin-bottom:6px}
 .back:hover{color:var(--text)}
@@ -222,11 +225,17 @@ function renderGrid(c){
   if(c==="Tutti") g.append(el("button",{class:"tool any",onclick:()=>openTool(null)},el("div",{class:"ic"},"ANY"),el("b",{},"Qualsiasi formato"),el("span",{},"Carica un file e scegli in cosa convertirlo")));
   if(c==="Tutti"||c==="PDF") P.forEach(t=>g.append(el("button",{class:"tool",onclick:()=>{location.hash="pdf="+t.name;}},
     el("div",{class:"ic",style:"background:var(--c-pdf);font-size:"+(t.name==="rotate"?"20px":"12px")},PDF_ICON[t.name]||"PDF"),el("b",{},t.title),el("span",{},t.description))));
+  if((c==="Tutti"||c==="PDF") && plicoUrl()) g.append(el("a",{class:"tool plico",href:plicoUrl(),target:"_blank",rel:"noopener"},
+    el("div",{class:"ic"},"+27"),el("b",{},"Altri strumenti PDF in Plico"),el("span",{},"Firma, oscura, proteggi, filigrana, PDF/A, confronta e altro")));
   if(c==="PDF") return;
   TOOLS.forEach((t,i)=>{ const src=toolSources(t); if(!src.some(s=>(F.inputs[s]||[]).includes(t[3]))) return;
     if(c!=="Tutti" && cat(src[0])!==c) return;
     g.append(el("button",{class:"tool",onclick:()=>openTool(i)},el("div",{class:"ic",style:`background:${color(t[4]||(t[3]==="pdf"?src[0]:t[3]))}`},label(t[4]||(t[3]==="pdf"?src[0]:t[3])).slice(0,4)),el("b",{},t[0]),el("span",{},t[1]))); });
 }
+// indirizzo di Plico per il browser: ":30128" = stesso host del convertitore, su un'altra porta
+function plicoUrl(){ const u=(F.plico_url||"").trim(); if(!u) return "";
+  if(/^:\d+/.test(u)) return `${location.protocol}//${location.hostname}${u}`;
+  return /^https?:\/\//.test(u) ? u : ""; }
 function route(){ const m=location.hash.match(/^#tool=(\w+|any)$/), pm=location.hash.match(/^#pdf=(\w+)$/);
   if(pm && P.some(t=>t.name===pm[1])) showPdf(P.find(t=>t.name===pm[1]));
   else if(m){ const i=m[1]==="any"?null:+m[1]; show(i); } else { $("#tools").classList.remove("hidden"); $("#work").classList.add("hidden"); $("#footer").classList.add("hidden"); } }
@@ -334,7 +343,13 @@ $("#go").onclick = () => {
   }
   ready.forEach(it=>{ const fd=pdfOptions(new FormData()); fd.append("files",it.file,it.file.name); send(it, "api/pdf/"+ptool.name, fd); });
 };
-$("#dlall").onclick = () => { items.filter(i=>i.state==="done").forEach((it,k)=>setTimeout(()=>{ const a=el("a",{href:`api/jobs/${it.job}/download`,download:it.out_name}); document.body.append(a); a.click(); a.remove(); }, k*400)); };
+// tutti i risultati in un unico ZIP: un form, cosi' il browser scarica il file senza tenerlo in memoria
+$("#dlall").onclick = () => {
+  const ids = items.filter(i=>i.state==="done").map(i=>i.job).join(",");
+  const f = el("form",{method:"post",action:"api/jobs/zip",class:"hidden"},
+    el("input",{type:"hidden",name:"ids",value:ids}), el("input",{type:"hidden",name:"lang",value:document.documentElement.lang==="en"?"en":"it"}));
+  document.body.append(f); f.submit(); f.remove();
+};
 
 function start(it){
   const fd=new FormData(); fd.append("target",it.target); fd.append("file",it.file,it.file.name);

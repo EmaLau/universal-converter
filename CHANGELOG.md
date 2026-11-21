@@ -5,8 +5,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.2.2] - 2026-11-21
+
 ### Added
-- Nextcloud app 1.1.1: screenshots on the App Store (no code changes).
+- **Download all as one ZIP**: `POST /api/jobs/zip` (permission `jobs`) puts the results of several finished jobs
+  in a single ZIP; the web page uses it for *Download all* instead of one download per file.
+- `/healthz` lists which conversion programs are installed (`programs`).
+- **Plico integration**: with `PLICO_URL` (e.g. `http://nas:30128`, or `:30128` for the same host) the web page shows
+  a *More PDF tools in Plico* card. The advanced PDF tools stay in Plico instead of being copied here (see the roadmap).
+- **Malformed-file test** `server/fuzz.py`: broken PDFs, image and SVG "bombs", a ZIP that expands to 1 GB, deeply
+  nested JSON and random bytes must not bring the service down. It runs inside every image before it is published.
+- **Monthly rebuild** of the latest release (1st of the month, no cache), published only if the self-test and the
+  malformed-file test pass, so the image picks up the Debian security updates.
+- Dependabot for the GitHub Actions; Nextcloud app 1.1.1 with screenshots on the App Store (no code changes).
 
 ## [2.2.1] - 2026-11-21
 
@@ -61,7 +72,8 @@ All notable changes to this project are documented here. The format follows
 First public release: about 200 formats and more than 3,000 combinations with chained conversions, web page,
 JSON API, Nextcloud app "Converti in" and automatic PDFs for Nextcloud.
 
-[Unreleased]: https://github.com/EmaLau/universal-converter/compare/v2.2.1...HEAD
+[Unreleased]: https://github.com/EmaLau/universal-converter/compare/v2.2.2...HEAD
+[2.2.2]: https://github.com/EmaLau/universal-converter/compare/v2.2.1...v2.2.2
 [2.2.1]: https://github.com/EmaLau/universal-converter/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/EmaLau/universal-converter/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/EmaLau/universal-converter/compare/v2.0.0...v2.1.0

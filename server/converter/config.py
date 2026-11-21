@@ -36,6 +36,7 @@ class Settings:
     admin_password: str = ""        # password della pagina /admin (oppure file admin-password in data_dir)
     require_key: bool = False       # valore iniziale di "chiave obbligatoria per le API"
     admin_login: bool = True        # valore iniziale di "password per l'area admin"
+    plico_url: str = ""             # indirizzo di Plico per il browser (es. http://nas:30128 o ":30128" = stesso host)
 
     @property
     def jobs_dir(self) -> Path:
@@ -68,4 +69,5 @@ class Settings:
             admin_password=env.get("CONVERTER_ADMIN_PASSWORD", ""),
             require_key=truthy(env.get("API_REQUIRE_KEY")),
             admin_login=truthy(env.get("CONVERTER_ADMIN_LOGIN", "true")),
+            plico_url=env.get("PLICO_URL", "").strip(),
         )

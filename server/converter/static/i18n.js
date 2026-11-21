@@ -50,6 +50,8 @@ const UC_I18N = (() => {
     "Compressione": "Compression", "Bassa (qualità di stampa)": "Low (print quality)", "Media (consigliata)": "Medium (recommended)",
     "Alta (file più piccolo)": "High (smallest file)", "Lingue": "Languages",
     "Rifai l'OCR anche sulle pagine che hanno già testo": "Redo OCR also on pages that already have text",
+    "Altri strumenti PDF in Plico": "More PDF tools in Plico",
+    "Firma, oscura, proteggi, filigrana, PDF/A, confronta e altro": "Sign, redact, protect, watermark, PDF/A, compare and more",
     // area di lavoro
     "← Tutti gli strumenti": "← All tools", "Converti file": "Convert files", "Seleziona i file": "Select files",
     "oppure trascinali qui": "or drop them here",

@@ -1,11 +1,16 @@
 name: Docker image
 
 # Each release tag (v2.2.1, ...) builds the image for linux/amd64 and linux/arm64, each one natively on its own
-# GitHub runner (no emulation), runs the self-test inside it and pushes it by digest. A last job joins the two
-# into one multi-platform image on ghcr.io/emalau/universal-converter with the tags 2.2.1, 2.2 and latest.
+# GitHub runner (no emulation), runs the self-test and the malformed-file test inside it and pushes it by digest.
+# A last job joins the two into one multi-platform image on ghcr.io/emalau/universal-converter with the tags
+# 2.2.1, 2.2 and latest.
+# On the 1st of every month (and by hand) the latest release is rebuilt the same way, so the image picks up the
+# Debian security updates; it is published only if both tests pass.
 on:
   push:
     tags: ["v*"]
+  schedule:
+    - cron: "17 4 1 * *"
   workflow_dispatch:
 
 permissions:
@@ -16,7 +21,26 @@ env:
   IMAGE: ghcr.io/emalau/universal-converter
 
 jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      ref: ${{ steps.v.outputs.ref }}
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: v
+        name: Release to build
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then tag="$GITHUB_REF_NAME"
+          else tag=$(git tag --list 'v*' --sort=-v:refname | head -1); fi
+          echo "ref=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "Building $tag"
+
   build:
+    needs: version
     strategy:
       fail-fast: true
       matrix:
@@ -29,6 +53,8 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.ref }}
       - name: Platform name
         run: echo "PAIR=${PLATFORM//\//-}" >> "$GITHUB_ENV"
         env:
@@ -45,6 +71,9 @@ jobs:
           platforms: ${{ matrix.platform }}
           load: true
           tags: universal-converter:ci
+          # monthly rebuild: no cache and a fresh base image, otherwise the old Debian packages would be reused
+          no-cache: ${{ github.event_name == 'schedule' }}
+          pull: true
           cache-from: type=gha,scope=${{ env.PAIR }}
           cache-to: type=gha,mode=max,scope=${{ env.PAIR }}
       - name: Self-test
@@ -52,6 +81,8 @@ jobs:
           docker run -d --name uc -p 8080:8080 universal-converter:ci
           for i in $(seq 1 60); do curl -fs http://127.0.0.1:8080/healthz && break; sleep 2; done
           docker exec uc python3 /app/selftest.py
+      - name: Malformed files
+        run: docker exec uc python3 /app/fuzz.py --timeout 900
       - name: Logs
         if: failure()
         run: docker logs uc | tail -100
@@ -82,7 +113,7 @@ jobs:
           retention-days: 1
 
   merge:
-    needs: build
+    needs: [version, build]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
@@ -96,10 +127,9 @@ jobs:
         with:
           images: ${{ env.IMAGE }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=sha,enable=${{ !startsWith(github.ref, 'refs/tags/v') }}
+            type=semver,pattern={{version}},value=${{ needs.version.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.version.outputs.version }}
+            type=raw,value=latest
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -111,4 +141,4 @@ jobs:
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ env.IMAGE }}@sha256:%s ' *)
       - name: Inspect
-        run: docker buildx imagetools inspect ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}
+        run: docker buildx imagetools inspect ${{ env.IMAGE }}:${{ needs.version.outputs.version }}

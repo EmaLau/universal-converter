@@ -1,6 +1,6 @@
 [project]
 name = "universal-converter"
-version = "2.2.1"
+version = "2.2.2"
 description = "Convertitore di file self-hosted: documenti, immagini, audio, video, ebook, archivi e strumenti PDF"
 requires-python = ">=3.11"
 license = "AGPL-3.0-only"

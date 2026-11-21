@@ -29,7 +29,7 @@ RUN groupadd -g "$GID" converter 2>/dev/null || true \
     && mkdir -p /work && chown "$UID:$GID" /work
 
 COPY converter /app/converter
-COPY selftest.py /app/selftest.py
+COPY selftest.py fuzz.py /app/
 # Documentazione: dal Markdown alle pagine /docs, in italiano e in inglese
 COPY docs /app/docs
 RUN pandoc /app/docs/documentazione.md --standalone --section-divs --toc --toc-depth=2 \

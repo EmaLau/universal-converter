@@ -134,6 +134,7 @@ Le impostazioni si scrivono in `.env`, nella cartella principale del progetto (p
 | `CONVERTER_ADMIN_PASSWORD` | vuoto | Password della pagina `/admin` per le [chiavi API](#chiavi-api). In alternativa si scrive nel file `/work/data/admin-password`. Senza password l'area admin resta disattivata. |
 | `API_REQUIRE_KEY` | `false` | Valore iniziale dell'interruttore *Chiave obbligatoria per le API*; poi conta quello salvato nella pagina `/admin`. |
 | `CONVERTER_ADMIN_LOGIN` | `true` | Valore iniziale dell'interruttore *Password per entrare in questa pagina*. |
+| `PLICO_URL` | *(vuota)* | Indirizzo di un'istanza di [Plico](https://github.com/EmaLau/plico) come la raggiunge il browser (`http://nas:30128`), oppure solo `:30128` per lo stesso host su un'altra porta. Se impostata, la pagina mostra la scheda *Altri strumenti PDF in Plico*. |
 | `DATA_DIR` | `/work/data` | Cartella delle chiavi API e delle impostazioni dell'area admin. |
 | `CONVERTER_CPUS` | `4` | CPU massime del container. |
 | `CONVERTER_MEMORY` | `4G` | Memoria massima del container. |
@@ -205,7 +206,7 @@ Le chiavi si creano nella pagina `/admin`, sul modello di Gokapi. Per attivarla 
   |---|---|
   | `formats` | `GET /api/formats`, `GET /api/plan/{src}/{dst}`, `GET /api/pdf` |
   | `convert` | `POST /api/jobs`, `POST /api/pdf/{tool}` |
-  | `jobs` | `GET /api/jobs/{id}`, `GET /api/jobs/{id}/download`, `DELETE /api/jobs/{id}` |
+  | `jobs` | `GET /api/jobs/{id}`, `GET /api/jobs/{id}/download`, `POST /api/jobs/zip`, `DELETE /api/jobs/{id}` |
 
   Un client completo, come l'app Nextcloud o Plico, ha bisogno di tutti e tre.
 - La chiave intera si vede **una sola volta**, quando la crei: sul server resta solo la sua impronta SHA-256. Nella pagina vedi l'inizio della chiave, quando è stata creata e l'ultimo uso; puoi cambiare i permessi o revocarla.
@@ -231,18 +232,20 @@ curl -H "apikey: uconv_..." -F file=@relazione.docx -F target=pdf http://localho
 | `POST` | `/api/pdf/{tool}` | Avvia uno strumento PDF su uno o più PDF |
 | `GET` | `/api/jobs/{id}` | Stato di un lavoro |
 | `GET` | `/api/jobs/{id}/download` | Scarica il risultato |
+| `POST` | `/api/jobs/zip` | Scarica più risultati in un unico ZIP |
 | `DELETE` | `/api/jobs/{id}` | Cancella subito un lavoro e i suoi file |
-| `GET` | `/docs` | Questa documentazione |
+| `GET` | `/docs` | Questa documentazione (`?lang=it` o `?lang=en`) |
 | `GET` | `/apidocs` | Documentazione interattiva dell'API |
 | `GET` | `/admin` | Chiavi API |
 
 ## `GET /healthz`
 
 ```json
-{"ok": true, "version": "2.0.0", "jobs": 3, "running": 1, "queued": 0}
+{"ok": true, "version": "2.2.2", "jobs": 3, "running": 1, "queued": 0,
+ "programs": {"LibreOffice": true, "FFmpeg": true, "Pandoc": true, "...": true}}
 ```
 
-Usato anche dall'healthcheck di Docker. Non richiede mai la chiave.
+Usato anche dall'healthcheck di Docker. Non richiede mai la chiave. `programs` dice quali programmi di conversione sono installati: utile se ti costruisci un'immagine più piccola.
 
 ## `GET /api/formats`
 
@@ -252,7 +255,8 @@ Usato anche dall'healthcheck di Docker. Non richiede mai la chiave.
   "categories": {"pdf": "Documento", "mp3": "Audio", "...": "..."},
   "tools": ["Calibre", "FFmpeg", "ImageMagick", "LibreOffice", "..."],
   "retain_hours": 6.0,
-  "max_upload_bytes": 21474836480
+  "max_upload_bytes": 21474836480,
+  "plico_url": ""
 }
 ```
 
@@ -324,6 +328,10 @@ Risponde `404` se il lavoro non esiste: mai creato, già cancellato, scaduto o s
 Restituisce il file con il nome giusto (`Content-Disposition`), anche con caratteri accentati. Risponde `409` se il lavoro non è ancora finito.
 
 Il nome del risultato è quello del file originale con la nuova estensione: `Relazione finale.docx` → `Relazione finale.pdf`. Se il risultato contiene più file, per esempio le pagine di un PDF convertite in immagini, si riceve uno ZIP.
+
+## `POST /api/jobs/zip`
+
+Campi del form: `ids`, gli id dei lavori separati da virgole (al massimo 200), e facoltativo `lang` (`it` o `en`, per il nome dello ZIP). Restituisce un unico ZIP (`convertiti.zip`, o `converted.zip` in inglese) con i risultati dei lavori finiti; quelli non pronti o non più esistenti vengono saltati, e due risultati con lo stesso nome diventano `foto.jpg` e `foto (2).jpg`. `404` se nessuno è pronto. Permesso: `jobs`. La pagina web lo usa per *Scarica tutti*.
 
 ## `DELETE /api/jobs/{id}`
 

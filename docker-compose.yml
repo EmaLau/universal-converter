@@ -25,6 +25,7 @@ services:
       CONVERTER_ADMIN_PASSWORD: ${CONVERTER_ADMIN_PASSWORD:-}
       CONVERTER_ADMIN_LOGIN: ${CONVERTER_ADMIN_LOGIN:-true}
       API_REQUIRE_KEY: ${API_REQUIRE_KEY:-false}
+      PLICO_URL: ${PLICO_URL:-}
     volumes:
       - converter-work:/work
     deploy:

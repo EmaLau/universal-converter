@@ -22,6 +22,9 @@ import asyncio
 import base64
 import hashlib
 import re
+import shutil
+import tempfile
+import zipfile
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
@@ -29,6 +32,7 @@ from urllib.parse import urlparse
 
 from fastapi import Body, FastAPI, File, Form, Request, Security, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from starlette.background import BackgroundTask
 
 from . import __version__, apikeys, i18n, pdftools
 from .config import Settings
@@ -50,6 +54,22 @@ Gli errori rispondono con JSON `{"detail": "..."}` e un codice HTTP. I messaggi 
 con `Accept-Language: en` (o un'altra lingua diversa dall'italiano) errori, passaggi e note arrivano in inglese.
 
 Esempio: `curl -H "apikey: uconv_..." -F file=@relazione.docx -F target=pdf http://host:8080/api/jobs`"""
+
+
+# programmi esterni usati dalle conversioni: nome -> eseguibili (ne basta uno)
+PROGRAMS = {
+    "LibreOffice": ["soffice"], "Pandoc": ["pandoc"], "FFmpeg": ["ffmpeg"], "ImageMagick": ["magick", "convert"],
+    "Calibre": ["ebook-convert"], "Poppler": ["pdftoppm"], "Ghostscript": ["gs"], "LibRaw": ["dcraw_emu"],
+    "librsvg": ["rsvg-convert"], "Xournal++": ["xournalpp"], "bsdtar": ["bsdtar"], "7-Zip": ["7z", "7zz"],
+    "qpdf": ["qpdf"], "OCRmyPDF": ["ocrmypdf"], "Tesseract": ["tesseract"],
+}
+MAX_ZIP_JOBS = 200
+
+
+@lru_cache(maxsize=1)
+def programs() -> dict[str, bool]:
+    """Quali programmi di conversione sono installati (letto una volta: non cambiano a servizio avviato)."""
+    return {name: any(shutil.which(b) for b in bins) for name, bins in PROGRAMS.items()}
 
 
 @lru_cache(maxsize=None)
@@ -187,8 +207,8 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
 
     @app.get("/healthz", tags=["Servizio"])
     async def healthz():
-        """Stato del servizio: non richiede la chiave."""
-        return {"ok": True, "version": __version__, **manager.stats()}
+        """Stato del servizio e programmi di conversione installati: non richiede la chiave."""
+        return {"ok": True, "version": __version__, **manager.stats(), "programs": programs()}
 
     # ------------------------------------------------------------ API
 
@@ -196,7 +216,8 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
     async def formats():
         """Formati e combinazioni supportate. Permesso: `formats`."""
         return graph.payload() | {"retain_hours": settings.retain_hours,
-                                  "max_upload_bytes": settings.max_upload_bytes}
+                                  "max_upload_bytes": settings.max_upload_bytes,
+                                  "plico_url": settings.plico_url}
 
     @app.get("/api/plan/{src}/{dst}", **api)
     async def plan(src: str, dst: str):
@@ -233,6 +254,30 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
             raise JobError(400, str(e)) from None
         job = await manager.create_tool([(f, f.filename) for f in files], t, opts, meta, lang_of(request))
         return public(request, job)
+
+    @app.post("/api/jobs/zip", **api)
+    async def jobs_zip(request: Request, ids: str = Form(...), lang: str = Form("")):
+        """Scarica in un unico ZIP i risultati di piu' lavori finiti (`ids` separati da virgole, al massimo 200;
+        quelli non pronti vengono saltati). Permesso: `jobs`."""
+        wanted = [i for i in dict.fromkeys(x.strip() for x in ids.split(",")) if i][:MAX_ZIP_JOBS]
+        jobs = [j for j in (manager.jobs.get(i) for i in wanted) if j and j.state == "done" and j.out_path]
+        if not jobs:
+            raise JobError(404, "Nessun risultato pronto da scaricare")
+        lg = lang if lang in ("it", "en") else lang_of(request)
+        tmp = Path(tempfile.mkdtemp(dir=settings.work_dir))
+        out, used = tmp / "results.zip", set()
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_STORED, allowZip64=True) as z:
+            for j in jobs:
+                name, n = j.out_name, 1
+                while name in used:  # due risultati con lo stesso nome: "foto (2).jpg"
+                    n += 1
+                    stem, dot, ext = j.out_name.rpartition(".")
+                    name = f"{stem} ({n}).{ext}" if dot else f"{j.out_name} ({n})"
+                used.add(name)
+                z.write(j.out_path, name)
+        return FileResponse(out, filename="converted.zip" if lg == "en" else "convertiti.zip",
+                            media_type="application/zip",
+                            background=BackgroundTask(shutil.rmtree, tmp, ignore_errors=True))
 
     @app.get("/api/jobs/{job_id}", **api)
     async def job_status(request: Request, job_id: str):

@@ -27,6 +27,7 @@ _EN: list[tuple[str, str]] = [
     (r"Conversione non supportata", "Conversion not supported"),
     (r"Strumento PDF sconosciuto: (.*)", r"Unknown PDF tool: \1"),
     (r"Non ancora pronto", "Not ready yet"),
+    (r"Nessun risultato pronto da scaricare", "No finished result to download"),
     (r"Non so convertire \.(.*) in \.(.*)", r"Cannot convert .\1 to .\2"),
     (r"Troppi lavori in corso: riprova tra poco", "Too many jobs in progress: try again shortly"),
     (r"File vuoto: (.*)", r"Empty file: \1"),
