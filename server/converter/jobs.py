@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from . import i18n, webhooks
+from . import fetch, i18n, options, preview, webhooks
 from .config import Settings
 from .formats import ext_of, normalize, safe_filename, stem_of
 from .graph import Graph
@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 CHUNK = 4 * 1024 * 1024
 JANITOR_EVERY = 600
+STAGED_HOURS = 1.0  # file scaricati da un indirizzo e non ancora convertiti
 
 
 class Upload(Protocol):
@@ -67,6 +68,8 @@ class Job:
     callback_url: str = ""               # webhook da chiamare alla fine
     webhook: str = ""                    # esito del webhook: "", "ok" o l'errore
     size_in: int = 0                     # byte caricati
+    options: dict = field(default_factory=dict)  # opzioni di conversione (options.py)
+    preview: str = ""                    # tipo di anteprima del risultato (preview.py)
     task: asyncio.Task | None = field(default=None, repr=False)
 
     @property
@@ -75,6 +78,17 @@ class Job:
 
     def input_files(self) -> list[Path]:
         return self.inputs or [self.input_path]
+
+
+@dataclass
+class Staged:
+    """File scaricato da un indirizzo, in attesa che l'utente scelga il formato."""
+    id: str
+    path: Path
+    name: str
+    size: int
+    key_id: str = ""
+    created: float = field(default_factory=time.time)
 
 
 class JobManager:
@@ -93,11 +107,14 @@ class JobManager:
         self.rejected = Counter()          # motivo -> numero (limiti delle chiavi)
         # volume giornaliero per chiave API: (key_id, "AAAA-MM-GG") -> byte (in memoria: si azzera al riavvio)
         self.usage: dict[tuple[str, str], int] = {}
+        self.staged: dict[str, Staged] = {}
+        self._preview_sem = asyncio.Semaphore(1)
 
     # -------------------------------------------------------------------------------------- ciclo di vita
     async def start(self) -> None:
         self._sem = asyncio.Semaphore(self.settings.max_parallel)
         shutil.rmtree(self.settings.jobs_dir, ignore_errors=True)  # lavori di un avvio precedente: orfani
+        shutil.rmtree(self.staged_dir, ignore_errors=True)
         self.settings.jobs_dir.mkdir(parents=True, exist_ok=True)
         self._janitor = asyncio.create_task(self._janitor_loop())
 
@@ -109,32 +126,90 @@ class JobManager:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await t
 
+    @property
+    def staged_dir(self) -> Path:
+        return self.settings.work_dir / "staged"
+
     # ------------------------------------------------------------------------------------------- lavori
-    async def create(self, upload: Upload, filename: str | None, target: str, meta: str = "", *, lang: str = "it",
-                     key_id: str = "", limits: dict | None = None, callback_url: str = "") -> Job:
+    async def create(self, upload: Upload | None, filename: str | None, target: str, meta: str = "", *,
+                     opts: str | dict | None = None, staged: str = "", lang: str = "it", key_id: str = "",
+                     limits: dict | None = None, callback_url: str = "") -> Job:
+        """Nuovo lavoro da un file caricato oppure (``staged``) da un file gia' scaricato con stage_url()."""
+        st = None
+        if staged:
+            st = self.staged.get(staged)
+            if not st or st.key_id != key_id:
+                raise JobError(404, "File scaricato non trovato (scaduto o server riavviato)")
+            filename = st.name
         name = safe_filename(filename)
         src, target = ext_of(name), normalize(target)
-        if not self.graph.plan(src, target):
+        plan = self.graph.plan(src, target)
+        if not plan:
             raise JobError(400, f"Non so convertire .{src or '?'} in .{target}")
+        try:
+            clean = options.parse(opts, plan, target)
+        except options.OptionError as e:
+            raise JobError(400, str(e)) from None
         if len(self.jobs) >= self.settings.max_queue:
             raise JobError(503, "Troppi lavori in corso: riprova tra poco")
-        budget = self._check_limits(key_id, limits)
+        budget = None if st else self._check_limits(key_id, limits)
         job_id = uuid.uuid4().hex
         job = Job(id=job_id, dir=self.settings.jobs_dir / job_id, filename=name, src_ext=src, target=target,
-                  meta=meta[:2000], lang=lang, key_id=key_id, callback_url=callback_url)
+                  meta=meta[:2000], lang=lang, key_id=key_id, callback_url=callback_url, options=clean)
         job.dir.mkdir(parents=True)
-        try:
-            size = await self._save(upload, job.input_path, budget)
-        except BaseException:
-            shutil.rmtree(job.dir, ignore_errors=True)
-            raise
-        if size == 0:
-            shutil.rmtree(job.dir, ignore_errors=True)
-            raise JobError(400, "File vuoto")
-        self._account(job, size)
+        if st:  # gia' contato nel volume della chiave quando e' stato scaricato
+            self.staged.pop(st.id, None)
+            shutil.move(st.path, job.input_path)
+            shutil.rmtree(st.path.parent, ignore_errors=True)
+            job.size_in = st.size
+        else:
+            assert upload is not None
+            try:
+                size = await self._save(upload, job.input_path, budget)
+            except BaseException:
+                shutil.rmtree(job.dir, ignore_errors=True)
+                raise
+            if size == 0:
+                shutil.rmtree(job.dir, ignore_errors=True)
+                raise JobError(400, "File vuoto")
+            self._account(job, size)
         self.jobs[job.id] = job
         job.task = asyncio.create_task(self._process(job))
         return job
+
+    async def stage_url(self, url: str, *, key_id: str = "", limits: dict | None = None) -> Staged:
+        """Scarica un file da un indirizzo e lo tiene da parte finche' non si sceglie il formato."""
+        if not self.settings.url_import:
+            raise JobError(404, "Importazione da indirizzo disattivata (URL_IMPORT=false)")
+        if len(self.staged) >= self.settings.max_queue:
+            raise JobError(503, "Troppi lavori in corso: riprova tra poco")
+        budget = self._check_limits(key_id, limits)
+        sid = uuid.uuid4().hex
+        d = self.staged_dir / sid
+        d.mkdir(parents=True)
+        limit = self.settings.max_upload_bytes if budget is None else min(budget, self.settings.max_upload_bytes)
+        try:
+            name, mime_ext, size = await asyncio.to_thread(fetch.download, url, d / "download", limit,
+                                                           self.settings.url_allow_private)
+        except fetch.FetchError as e:
+            shutil.rmtree(d, ignore_errors=True)
+            if e.status == 413 and budget is not None and budget < self.settings.max_upload_bytes:
+                self.rejected["daily"] += 1
+                raise JobError(429, "Limite giornaliero della chiave superato") from None
+            raise JobError(e.status, str(e)) from None
+        except BaseException:
+            shutil.rmtree(d, ignore_errors=True)
+            raise
+        name = safe_filename(name)
+        if mime_ext and not self.graph.targets(ext_of(name)) and self.graph.targets(mime_ext):
+            name = f"{stem_of(name)}.{mime_ext}"  # "pagina" o "download.php" -> estensione dal Content-Type
+        st = Staged(id=sid, path=d / "download", name=name, size=size, key_id=key_id)
+        self.staged[sid] = st
+        self.bytes_in += size
+        if key_id:
+            k = (key_id, self.today())
+            self.usage[k] = self.usage.get(k, 0) + size
+        return st
 
     async def create_tool(self, uploads: list[tuple[Upload, str | None]], tool: PdfTool, opts: dict,
                           meta: str = "", lang: str = "it", *, key_id: str = "", limits: dict | None = None,
@@ -245,6 +320,10 @@ class JobManager:
             d |= {"tool": job.tool.name, "files": len(job.inputs)}
         if job.note:
             d["note"] = job.note
+        if job.options:
+            d["options"] = job.options
+        if job.preview:
+            d["preview"] = job.preview
         if job.callback_url:
             d["webhook"] = job.webhook or "pending"
         if job.state == "done" and job.out_path:
@@ -265,6 +344,8 @@ class JobManager:
             try:
                 await (self._run_tool(job) if job.tool else self._run_steps(job))
                 job.state, job.progress, job.step = "done", 1.0, ""
+                if self.settings.previews and job.out_path:
+                    job.preview = preview.kind(job.out_path, job.out_name, self.graph)
             except asyncio.CancelledError:
                 job.state, job.error = "error", "annullato"
                 raise
@@ -342,9 +423,23 @@ class JobManager:
             await asyncio.sleep(JANITOR_EVERY)
             self.cleanup()
 
+    async def preview(self, job: Job) -> tuple[Path, str]:
+        """File d'anteprima del risultato e suo tipo MIME."""
+        if job.state != "done" or not job.out_path:
+            raise JobError(409, "Non ancora pronto")
+        if not job.preview:
+            raise JobError(404, "Anteprima non disponibile per questo formato")
+        try:
+            return await preview.get(job, self.graph, self._preview_sem)
+        except preview.PreviewError:
+            raise JobError(404, "Anteprima non disponibile per questo file") from None
+
     def cleanup(self, now: float | None = None) -> int:
         """Cancella i lavori finiti da piu' di RETAIN_HOURS; restituisce quanti ne ha tolti."""
         now = now or time.time()
+        for st in [s for s in self.staged.values() if now - s.created > STAGED_HOURS * 3600]:
+            self.staged.pop(st.id, None)
+            shutil.rmtree(st.path.parent, ignore_errors=True)
         old = [j for j in self.jobs.values() if j.finished and now - j.finished > self.settings.retain_hours * 3600]
         for job in old:
             self.drop(job)

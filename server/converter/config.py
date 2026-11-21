@@ -40,6 +40,9 @@ class Settings:
     webhook_secret: str = ""        # firma HMAC dei webhook (X-Converter-Signature)
     webhook_hosts: frozenset[str] = field(default_factory=frozenset)  # host ammessi per callback_url (vuoto = tutti)
     metrics: bool = True            # GET /metrics per Prometheus
+    previews: bool = True           # anteprima dei risultati nella pagina (GET /api/jobs/{id}/preview)
+    url_import: bool = True         # conversione di un file da un indirizzo web (POST /api/fetch)
+    url_allow_private: bool = False # anche indirizzi della rete locale per POST /api/fetch
 
     @property
     def jobs_dir(self) -> Path:
@@ -76,4 +79,7 @@ class Settings:
             webhook_secret=env.get("WEBHOOK_SECRET", ""),
             webhook_hosts=frozenset(h.strip().lower() for h in env.get("WEBHOOK_HOSTS", "").split(",") if h.strip()),
             metrics=truthy(env.get("METRICS", "true")),
+            previews=truthy(env.get("PREVIEWS", "true")),
+            url_import=truthy(env.get("URL_IMPORT", "true")),
+            url_allow_private=truthy(env.get("URL_ALLOW_PRIVATE")),
         )

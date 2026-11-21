@@ -30,6 +30,8 @@ Le schermate mostrano l'interfaccia in inglese; con il selettore IT / EN (o un b
 ## Funzionalità
 
 - **Pagina web** con strumenti pronti ("Word in PDF", "HEIC in JPG", "JSON in Excel"…), trascinamento e conversione di più file insieme.
+- **Opzioni e preset**: qualità e dimensione delle immagini, rimozione dei metadati, risoluzione e qualità dei video, bitrate dell'audio, taglio, pagine e DPI dei PDF; preset pronti ("Foto per il web", "Video per WhatsApp"…) e salvati da te.
+- **Anteprima prima di scaricare** (immagini, prima pagina dei documenti, audio e video, testo), **conversioni recenti**, **incolla** dagli appunti, conversione **da un indirizzo web** e **app installabile** con il menu Condividi del sistema.
 - **Strumenti PDF**: unisci più PDF nell'ordine scelto, dividi per pagina o per intervallo, estrai o togli pagine, ruota, comprimi e fai l'**OCR** delle scansioni per renderle ricercabili (Tesseract, con italiano e inglese).
 - **Conversioni a catena**: se non esiste un programma che converte direttamente, il server trova il percorso più breve. Markdown → PDF diventa Pandoc + LibreOffice, JSON → Excel diventa JSON → CSV → XLSX.
 - **Veloce dove si può**: i video già compatibili vengono copiati senza ricodifica, in pochi secondi.

@@ -28,6 +28,8 @@
 ## Features
 
 - **Web page** with ready-made tools ("Word to PDF", "HEIC to JPG", "JSON to Excel"…), drag and drop, and batch conversion of several files at once.
+- **Options and presets**: image quality and size, metadata removal, video resolution and quality, audio bitrate, trimming, PDF pages and DPI; built-in presets ("Photos for the web", "Video for WhatsApp"…) and your own.
+- **Preview before downloading** (images, first page of documents, audio and video, text), **recent conversions**, **paste** from the clipboard, conversion **from a web address**, and an **installable app** with the system Share menu.
 - **PDF tools**: merge several PDFs in the chosen order, split by page or range, extract or remove pages, rotate, compress, and **OCR** scans to make them searchable (Tesseract, Italian and English included).
 - **Chained conversions**: when no single program can do a conversion, the server finds the shortest path. Markdown → PDF becomes Pandoc + LibreOffice, JSON → Excel becomes JSON → CSV → XLSX.
 - **Fast where possible**: videos with compatible codecs are copied without re-encoding, in a few seconds.

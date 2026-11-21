@@ -138,6 +138,9 @@ Le impostazioni si scrivono in `.env`, nella cartella principale del progetto (p
 | `WEBHOOK_SECRET` | *(vuota)* | Firma i webhook: `X-Converter-Signature: sha256=<HMAC-SHA256 del corpo>`. |
 | `WEBHOOK_HOSTS` | *(vuota)* | Host ammessi in `callback_url`, separati da virgole (`n8n.lan, paperless`). Vuota = qualsiasi host. |
 | `METRICS` | `true` | `false` spegne `GET /metrics`. |
+| `PREVIEWS` | `true` | `false` spegne le anteprime dei risultati (`GET /api/jobs/{id}/preview`). |
+| `URL_IMPORT` | `true` | `false` spegne la conversione di un file da un indirizzo web (`POST /api/fetch`). |
+| `URL_ALLOW_PRIVATE` | `false` | `true` permette anche gli indirizzi della rete locale in `POST /api/fetch`: attivalo solo se il servizio non è raggiungibile da persone di cui non ti fidi. |
 | `DATA_DIR` | `/work/data` | Cartella delle chiavi API e delle impostazioni dell'area admin. |
 | `CONVERTER_CPUS` | `4` | CPU massime del container. |
 | `CONVERTER_MEMORY` | `4G` | Memoria massima del container. |
@@ -178,6 +181,34 @@ Note:
 - Se una conversione fallisce, il messaggio spiega il motivo e il tasto **Riprova** la rimette in coda.
 - I risultati restano scaricabili per `RETAIN_HOURS` ore, poi vengono cancellati.
 - La pagina segue il tema chiaro o scuro del sistema operativo.
+
+## Opzioni e preset
+
+Sotto la lista dei file compare il riquadro **Opzioni**, con le opzioni che valgono per i formati scelti:
+
+| Risultato | Opzioni |
+|---|---|
+| Immagini (ImageMagick) | Qualità (JPG, WEBP, HEIC, AVIF, JP2), lato lungo massimo in pixel (solo per rimpicciolire), togliere i metadati (data, GPS, fotocamera) |
+| Video | Inizio e fine (`90`, `1:30`, `0:01:30.5`), risoluzione massima, qualità (MP4, MOV, MKV, WEBM…), bitrate dell'audio, metadati |
+| Audio | Inizio e fine, bitrate (formati con perdita), audio mono, metadati |
+| PDF in JPG o PNG | Risoluzione (72, 150, 300 DPI) e pagine (`2` oppure `3-5`, `4-` fino alla fine) |
+
+Con le opzioni ha senso anche **lo stesso formato** in uscita: in fondo al menu c'è per esempio *JPG (stesso formato)* per rimpicciolire una foto, o *MP4 (stesso formato)* per tagliare o alleggerire un video.
+
+I **preset** riempiono formato e opzioni in un clic. Ci sono quelli predefiniti (*Foto per il web*, *Foto per email*, *Video per WhatsApp*, *Video leggero*, *Audio per podcast*, *Primi 30 secondi in MP3*, *Pagine PDF per la stampa*) e quelli tuoi: **Salva come preset** ricorda formato e opzioni attuali nel browser.
+
+## Anteprima, cronologia, indirizzi e incolla
+
+- **Anteprima**: sui risultati pronti, il pulsante mostra l'immagine, la prima pagina di PDF e documenti, un lettore per audio e video (i formati che il browser non legge diventano un estratto di 30 secondi), il testo o l'elenco dei file di un archivio. `PREVIEWS=false` la spegne.
+- **Conversioni recenti**: nella pagina iniziale, le ultime conversioni di questo browser, finché i file restano sul server (`RETAIN_HOURS`). La cronologia sta solo nel browser (localStorage).
+- **Da un indirizzo**: nel campo sotto il pulsante si incolla un indirizzo `https://…`; il server scarica il file e poi lo converte come gli altri (anche una pagina web, che diventa per esempio Markdown o PDF senza immagini). Gli indirizzi della rete locale sono rifiutati, salvo `URL_ALLOW_PRIVATE=true`; `URL_IMPORT=false` spegne la funzione.
+- **Incolla** (⌘V / Ctrl+V) un file copiato, un'immagine (per esempio uno screenshot), un testo (diventa un file `.txt`) o un indirizzo.
+
+## App installabile
+
+La pagina si può installare come app (PWA): in Chrome ed Edge compare **Installa** nell'intestazione, su iPhone si usa *Condividi → Aggiungi alla schermata Home*. Su Android, e in Chrome sul computer, l'app installata compare anche nel menu **Condividi** del sistema: i file condivisi si aprono nel convertitore.
+
+L'installazione e la condivisione richiedono **HTTPS** (o `localhost`): i browser non attivano il service worker su `http://`. Basta un reverse proxy con certificato, oppure `tailscale serve`. Su iPhone Safari non riceve file dal menu Condividi: lì servono i Comandi rapidi con l'API.
 
 ## Strumenti PDF
 
@@ -232,11 +263,14 @@ curl -H "apikey: uconv_..." -F file=@relazione.docx -F target=pdf http://localho
 | `GET` | `/metrics` | Metriche per Prometheus |
 | `GET` | `/api/formats` | Formati e combinazioni supportate |
 | `GET` | `/api/plan/{src}/{dst}` | Passaggi previsti per una conversione |
+| `GET` | `/api/options/{src}/{dst}` | Opzioni disponibili per una conversione |
+| `POST` | `/api/fetch` | Scarica un file da un indirizzo web, da convertire |
 | `POST` | `/api/jobs` | Crea un lavoro caricando un file |
 | `GET` | `/api/pdf` | Strumenti PDF disponibili e loro opzioni |
 | `POST` | `/api/pdf/{tool}` | Avvia uno strumento PDF su uno o più PDF |
 | `GET` | `/api/jobs/{id}` | Stato di un lavoro |
 | `GET` | `/api/jobs/{id}/download` | Scarica il risultato |
+| `GET` | `/api/jobs/{id}/preview` | Anteprima del risultato |
 | `POST` | `/api/jobs/zip` | Scarica più risultati in un unico ZIP |
 | `DELETE` | `/api/jobs/{id}` | Cancella subito un lavoro e i suoi file |
 | `GET` | `/docs` | Questa documentazione (`?lang=it` o `?lang=en`) |
@@ -261,11 +295,53 @@ Usato anche dall'healthcheck di Docker. Non richiede mai la chiave. `programs` d
   "tools": ["Calibre", "FFmpeg", "ImageMagick", "LibreOffice", "..."],
   "retain_hours": 6.0,
   "max_upload_bytes": 21474836480,
-  "plico_url": ""
+  "plico_url": "",
+  "previews": true,
+  "url_import": true,
+  "same": ["jpg", "png", "mp3", "mp4", "..."]
 }
 ```
 
 `inputs` contiene anche i sinonimi (`jpeg`, `yml`…), con le stesse destinazioni del formato principale.
+
+## `GET /api/options/{src}/{dst}`
+
+Opzioni disponibili per una conversione, con tipo (`int`, `select`, `bool`, `time`, `text`), etichetta e valori ammessi. Permesso: `formats`.
+
+```bash
+curl http://localhost:8080/api/options/png/jpg
+```
+
+```json
+{"options": [{"name": "quality", "type": "int", "label": "Qualità (1-100)", "min": 1, "max": 100},
+             {"name": "max_size", "type": "int", "label": "Lato lungo massimo (pixel)", "min": 16, "max": 20000},
+             {"name": "strip", "type": "bool", "label": "Togli i metadati (data, posizione GPS, fotocamera)"}]}
+```
+
+| Opzione | Vale per | Valori |
+|---|---|---|
+| `quality` | immagini JPG, WEBP, HEIC, AVIF, JP2 | 1–100 (predefinita 90) |
+| `max_size` | immagini | lato lungo massimo in pixel, 16–20000 (solo per rimpicciolire) |
+| `strip` | immagini, audio, video | `true`: toglie i metadati |
+| `start`, `end` | audio, video, GIF | secondi o `m:ss` / `h:mm:ss`; `end` dopo `start` |
+| `height` | video, GIF | `2160`, `1440`, `1080`, `720`, `480`, `360` (solo per rimpicciolire) |
+| `video_quality` | MP4, MOV, M4V, MKV, TS, FLV, WEBM | `high`, `medium`, `low` |
+| `audio_bitrate` | video e audio con perdita | `320`, `256`, `192`, `128`, `96`, `64` (kbps) |
+| `mono` | audio | `true`: un solo canale |
+| `dpi` | PDF → JPG/PNG | `72`, `150`, `300` |
+| `pages` | PDF → JPG/PNG | `2`, `3-5`, `4-` |
+
+Le opzioni dipendono dal programma che fa l'ultimo passaggio; le conversioni nello stesso formato (`jpg` → `jpg`, `mp4` → `mp4`, elencate in `same` di `/api/formats`) servono proprio ad applicarle.
+
+## `POST /api/fetch`
+
+Campo `url`: il server scarica il file (solo `http`/`https`, al massimo 5 redirect, dimensione massima `MAX_UPLOAD_GB`) e lo tiene da parte per un'ora. Risponde `201`:
+
+```json
+{"staged": "9b1f…", "filename": "relazione.docx", "size": 48213, "ext": "docx", "targets": ["pdf", "odt", "…"]}
+```
+
+Poi la conversione si avvia con `POST /api/jobs` mandando `staged` al posto di `file`. Il nome viene da `Content-Disposition` o dall'indirizzo; se non ha un'estensione conosciuta, dal `Content-Type`. Gli indirizzi privati, locali e riservati sono rifiutati (`400`), salvo `URL_ALLOW_PRIVATE=true`; la connessione va all'indirizzo IP controllato, quindi un nome che cambia indirizzo tra il controllo e il download non aggira il blocco. Il volume scaricato conta nel limite giornaliero della chiave. Permesso: `convert`.
 
 ## `GET /api/plan/{src}/{dst}`
 
@@ -286,10 +362,12 @@ Richiesta `multipart/form-data` con i campi:
 
 | Campo | Obbligatorio | Descrizione |
 |---|---|---|
-| `file` | sì | Il file da convertire. Il formato di partenza si ricava dall'estensione del nome. |
+| `file` | sì (o `staged`) | Il file da convertire. Il formato di partenza si ricava dall'estensione del nome. |
 | `target` | sì | Estensione di arrivo, per esempio `pdf`. |
 | `meta` | no | Testo libero (al massimo 2.000 caratteri) restituito nello stato del lavoro: utile per chi integra il servizio. |
 | `callback_url` | no | Webhook: un indirizzo `http`/`https` chiamato con `POST` quando il lavoro finisce (vedi *Webhook*). |
+| `options` | no | Opzioni di conversione in JSON, es. `{"quality": 80, "max_size": 1920}` (vedi `GET /api/options/{src}/{dst}`). Opzioni sconosciute o che non valgono per la conversione: `400`. |
+| `staged` | al posto di `file` | Id restituito da `POST /api/fetch`: converte il file scaricato da un indirizzo. Si usa una volta sola. |
 
 Risposta `201` con lo stato del lavoro (vedi sotto). Errori:
 
@@ -327,6 +405,8 @@ Gli errori hanno sempre la forma `{"detail": "messaggio"}`. I messaggi sono in i
 | `step` | Passaggio in corso, con il numero del passaggio se sono più di uno |
 | `error` | Con `error`: il motivo, mostrabile all'utente |
 | `out_name`, `size` | Con `done`: nome del file risultante e dimensione in byte |
+| `preview` | Con `done`: tipo di anteprima (`image`, `audio`, `video`, `text`), se il risultato ne ha una |
+| `options` | Le opzioni di conversione ricevute, già controllate |
 
 Risponde `404` se il lavoro non esiste: mai creato, già cancellato, scaduto o server riavviato.
 
@@ -335,6 +415,10 @@ Risponde `404` se il lavoro non esiste: mai creato, già cancellato, scaduto o s
 Restituisce il file con il nome giusto (`Content-Disposition`), anche con caratteri accentati. Risponde `409` se il lavoro non è ancora finito.
 
 Il nome del risultato è quello del file originale con la nuova estensione: `Relazione finale.docx` → `Relazione finale.pdf`. Se il risultato contiene più file, per esempio le pagine di un PDF convertite in immagini, si riceve uno ZIP.
+
+## `GET /api/jobs/{id}/preview`
+
+Anteprima del risultato, del tipo indicato dal campo `preview` dello stato: `image` (l'immagine se il browser la sa mostrare, altrimenti un PNG; per PDF e documenti la prima pagina; per uno ZIP di pagine la prima), `audio` e `video` (il file, oppure un estratto di 30 secondi in MP3 o MP4 a 480p per i formati che i browser non leggono), `text` (i primi 64 KB, oppure l'elenco dei file di un archivio; HTML e SVG non vengono mai serviti come pagina). Le anteprime generate restano nella cartella del lavoro. `404` se il formato non ha anteprima, `409` se il lavoro non è finito. Permesso: `jobs`.
 
 ## `POST /api/jobs/zip`
 

@@ -23,6 +23,12 @@ from .runner import ConvError, run, single_output, zip_many
 if TYPE_CHECKING:
     from .jobs import Job
 
+
+def opts_of(job, out_ext: str) -> dict:
+    """Opzioni di conversione scelte dall'utente, solo per l'ultimo passaggio (quello che crea il risultato)."""
+    o = getattr(job, "options", None) or {}
+    return o if o and out_ext == getattr(job, "target", out_ext) else {}
+
 # ------------------------------------------------------------------------------------------- LibreOffice
 LO_FILTERS = {
     "pdf": "pdf", "docx": "docx:MS Word 2007 XML", "odt": "odt", "rtf": "rtf", "doc": "doc:MS Word 97",
@@ -91,9 +97,17 @@ async def pdf_to_text(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
 async def pdf_to_images(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
     """Una immagine per pagina; con piu' pagine il risultato e' uno zip."""
     fmt = ["-png"] if out_ext == "png" else ["-jpeg", "-jpegopt", "quality=90"]
+    o = opts_of(job, out_ext)
+    rng = []
+    if o.get("pages"):
+        first, last = o["pages"]
+        total = await pdf_page_count(inp)
+        if first > total:
+            raise ConvError(f"il PDF ha {total} pagine: non c'è la pagina {first}")
+        rng = ["-f", str(first), "-l", str(min(last or total, total))]
     pages = wd / "pages"
     pages.mkdir()
-    await run(["pdftoppm", "-r", "150", *fmt, str(inp), str(pages / "pagina")], timeout=1800)
+    await run(["pdftoppm", "-r", o.get("dpi") or "150", *rng, *fmt, str(inp), str(pages / "pagina")], timeout=1800)
     files = sorted(pages.iterdir())
     if not files:
         raise ConvError("nessuna pagina nel PDF")
@@ -136,15 +150,17 @@ async def ghostscript_pdf(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
 
 # ---------------------------------------------------------------------------------------------- immagini
 async def imagemagick(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
+    from .options import magick_args
     out = wd / f"out.{out_ext}"
+    o = opts_of(job, out_ext)
     src = str(inp) if out_ext in ("gif", "webp", "tiff") else f"{inp}[0]"  # animazioni e pagine multiple
-    args = ["magick", src, "-auto-orient"]
+    args = ["magick", src, "-auto-orient", *magick_args(o, out_ext, final=True)]
     if out_ext in ("jpg", "bmp"):  # formati senza trasparenza: sfondo bianco invece di nero
         args += ["-background", "white", "-alpha", "remove", "-alpha", "off"]
     if out_ext == "ico":
         args += ["-resize", "256x256>", "-define", "icon:auto-resize=256,128,64,48,32,16"]
     if out_ext in ("jpg", "webp", "heic", "avif", "jxl"):
-        args += ["-quality", "90"]
+        args += ["-quality", str(o.get("quality", 90))]
     await run(args + [str(out)], timeout=900)
     return out
 
@@ -224,13 +240,19 @@ GIF_SECONDS = 60
 GIF_FILTER = "fps=12,scale='min(640,iw)':-2:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse"
 
 
-def ffmpeg_attempts(out_ext: str, vcodec: str, acodec: str) -> list[list[str]]:
-    """Argomenti da provare in ordine: prima la copia senza ricodifica, quando il contenitore lo permette."""
+def ffmpeg_attempts(out_ext: str, vcodec: str, acodec: str, opts: dict | None = None) -> list[list[str]]:
+    """Argomenti da provare in ordine: prima la copia senza ricodifica, quando il contenitore lo permette.
+    Con le opzioni (taglio, risoluzione, bitrate...) si ricodifica sempre."""
+    from .options import ffmpeg_output_args, reencode_needed
+    opts = opts or {}
     if out_ext in AUDIO_ARGS:
-        return [["-vn", *AUDIO_ARGS[out_ext]]]
+        return [ffmpeg_output_args(["-vn", *AUDIO_ARGS[out_ext]], opts, out_ext)]
     if out_ext == "gif":
-        return [["-t", str(GIF_SECONDS), "-an", "-filter_complex", GIF_FILTER, "-loop", "0"]]
-    attempts = [VIDEO_ARGS[out_ext]]
+        limit = [] if opts.get("end") else ["-t", str(GIF_SECONDS)]
+        return [ffmpeg_output_args([*limit, "-an", "-filter_complex", GIF_FILTER, "-loop", "0"], opts, out_ext)]
+    attempts = [ffmpeg_output_args(VIDEO_ARGS[out_ext], opts, out_ext)]
+    if reencode_needed(opts):
+        return attempts
     hevc_ok = out_ext in ("mp4", "mov", "m4v", "ts")
     if out_ext in COPY_H264 and (vcodec == "h264" or (vcodec == "hevc" and hevc_ok)) and acodec in ("aac", "mp3", ""):
         attempts.insert(0, ["-map", "0:v:0", "-map", "0:a?", "-c", "copy", *COPY_H264[out_ext]])
@@ -240,12 +262,19 @@ def ffmpeg_attempts(out_ext: str, vcodec: str, acodec: str) -> list[list[str]]:
 
 
 async def ffmpeg(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
+    from .options import ffmpeg_input_args
     out = wd / f"out.{out_ext}"
+    o = opts_of(job, out_ext)
+    if out_ext == "gif" and o.get("end") and o["end"] - o.get("start", 0) > GIF_SECONDS:
+        o = {**o, "end": o.get("start", 0) + GIF_SECONDS}  # anche con il taglio, al massimo 60 secondi di GIF
     duration = await ffprobe_duration(inp)
-    if out_ext == "gif":
+    if o.get("start") or o.get("end"):
+        duration = max(0.0, min(duration, o.get("end") or duration) - o.get("start", 0))
+    if out_ext == "gif" and not o.get("end"):
         duration = min(duration, GIF_SECONDS)
     vcodec, acodec = ("", "") if out_ext in AUDIO_ARGS or out_ext == "gif" else await ffprobe_codecs(inp)
-    base = ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", str(inp), "-map_metadata", "0"]
+    meta = ["-map_metadata", "-1", "-map_chapters", "-1"] if o.get("strip") else ["-map_metadata", "0"]
+    base = ["ffmpeg", "-hide_banner", "-nostdin", "-y", *ffmpeg_input_args(o), "-i", str(inp), *meta]
 
     def on_line(line: str):
         m = re.match(r"out_time_us=(\d+)", line)
@@ -253,7 +282,7 @@ async def ffmpeg(job: Job, inp: Path, out_ext: str, wd: Path) -> Path:
             job.progress = min(0.99, int(m.group(1)) / 1e6 / duration)
 
     err: ConvError | None = None
-    for args in ffmpeg_attempts(out_ext, vcodec, acodec):
+    for args in ffmpeg_attempts(out_ext, vcodec, acodec, o):
         try:
             await run(base + args + ["-progress", "pipe:1", "-nostats", str(out)], timeout=4 * 3600,
                       on_line=on_line)

@@ -4,7 +4,8 @@ Dentro il container (dove ci sono gli strumenti per creare i file di prova):
     docker compose exec converter python3 /app/selftest.py [--all] [--write-disabled]
 
 Senza --all prova un campione rappresentativo; con --all ogni coppia sorgente -> destinazione dei campioni.
-Prova anche gli strumenti PDF disponibili (unire, dividere, estrarre, togliere, ruotare, comprimere, OCR).
+Prova anche gli strumenti PDF disponibili (unire, dividere, estrarre, togliere, ruotare, comprimere, OCR),
+alcune conversioni con le opzioni (qualita', dimensione, taglio, pagine) e le anteprime dei risultati.
 Con --write-disabled salva le conversioni fallite in WORK_DIR/disabled.json: al prossimo avvio il server
 le toglie dai menu. Esce con codice 1 se almeno una conversione fallisce.
 """
@@ -140,6 +141,43 @@ def run_pdf_tools(api: Api, d: Path) -> tuple[int, list]:
     return ok, failed
 
 
+def option_cases(d: Path) -> list[tuple[Path, str, dict]]:
+    return [(d / "s.png", "jpg", {"quality": 70, "max_size": 160, "strip": True}),
+            (d / "s.jpg", "jpg", {"max_size": 100}),
+            (d / "s.mp4", "mp4", {"start": "1", "height": "360", "video_quality": "low", "audio_bitrate": "96"}),
+            (d / "s.mp4", "gif", {"end": "1.5", "height": "360"}),
+            (d / "s.wav", "mp3", {"end": "2", "audio_bitrate": "64", "mono": True}),
+            (d / "tre.pdf", "png", {"pages": "2-3", "dpi": "72"}),
+            (d / "s.docx", "pdf", {}), (d / "s.md", "html", {}), (d / "s.avi", "avi", {})]
+
+
+def run_options(api: Api, d: Path) -> tuple[int, list]:
+    """Conversioni con le opzioni e anteprima di ogni risultato (se il server le ha)."""
+    ok, failed = 0, []
+    for f, target, opts in option_cases(d):
+        label = f"{f.name:8} -> {target:4} {json.dumps(opts)[:40]}"
+        if not f.exists():
+            continue
+        try:
+            fields = {"target": target, **({"options": json.dumps(opts)} if opts else {})}
+            st = api.wait(api.post("/api/jobs", fields, [("file", f)])["id"])
+            kind = ""
+            if st["state"] == "done" and st.get("preview"):
+                req = urllib.request.Request(f"{api.base}/api/jobs/{st['id']}/preview", headers=api.auth)
+                with urllib.request.urlopen(req, timeout=600) as r:
+                    kind = f"anteprima {st['preview']} {len(r.read())} B"
+        except Exception as e:  # noqa: BLE001
+            st = {"state": "error", "error": str(e)}
+        if st["state"] == "done":
+            ok += 1
+            print(f"ok   {label:52} {st['size']:>9} B  {kind}")
+            api.delete(st["id"])
+        else:
+            failed.append([f.name, target])
+            print(f"FAIL {label:52} {st.get('error', '')[:300]}")
+    return ok, failed
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--url", default=os.environ.get("CONVERTER_URL", "http://127.0.0.1:8080"))
@@ -181,6 +219,9 @@ def main() -> int:
                 api.delete(job)
         pdf_ok, pdf_failed = run_pdf_tools(api, d)
         ok += pdf_ok
+        opt_ok, opt_failed = run_options(api, d)
+        ok += opt_ok
+        pdf_failed += opt_failed
     finally:
         shutil.rmtree(d, ignore_errors=True)
 

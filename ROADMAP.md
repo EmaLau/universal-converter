@@ -2,7 +2,7 @@
 
 Where Universal Converter is going. Released changes are in [CHANGELOG.md](CHANGELOG.md); ideas and requests are welcome as [issues](https://github.com/EmaLau/universal-converter/issues/new/choose).
 
-**Current version:** 2.3.0 (November 2026): ~200 formats, PDF tools with OCR, API keys, ready-made Docker image, Nextcloud app, web interface in English and Italian, image for amd64 and arm64.
+**Current version:** 2.4.0 (November 2026): ~200 formats, PDF tools with OCR, API keys, ready-made Docker image, Nextcloud app, web interface in English and Italian, image for amd64 and arm64, conversion options and presets, previews, installable app.
 
 ## 2.2 — an English interface
 
@@ -27,6 +27,22 @@ Universal Converter stays focused on **formats**; the advanced PDF tools (passwo
 - [x] **Per-key limits**: maximum concurrent jobs and daily volume for each API key, set on the `/admin` page (2.3.0).
 - [x] **Metrics** at `/metrics` (Prometheus): jobs, failures and duration per tool (2.3.0).
 - [x] `/healthz` reports which conversion programs are available (2.2.2).
+
+## 2.4.0 — a richer web page ✅
+
+- [x] **Preview** of the result before downloading (images, first page of documents, audio and video, text).
+- [x] **Conversion options** for the most used formats: image quality and size, video resolution and quality, audio bitrate, trimming, PDF pages and DPI; same-format conversions to apply them.
+- [x] **Presets** ("photos for the web", "video for WhatsApp", "audio for podcasts"…), built-in and saved in the browser.
+- [x] **Recent conversions** in the browser, while the files are still on the server.
+- [x] **Paste** from the clipboard and convert a file **from a web address**.
+- [x] **Installable app (PWA)** with the system Share menu (Web Share Target).
+
+## Later
+
+- Watched folder and automatic rules in Nextcloud, notifications when a long conversion ends.
+- iPhone Shortcuts documented, a small CLI (`uconv file.docx pdf`), n8n / Paperless-ngx integrations.
+- Audio and video transcription with a local Whisper (separate, optional image), PDF tables to CSV/Excel.
+- A "lite" image without Calibre, LibreOffice and video.
 
 ## Maintenance (ongoing)
 

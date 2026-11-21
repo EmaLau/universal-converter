@@ -141,6 +141,9 @@ Settings go in `.env`, in the project's root folder (start from `.env.example`).
 | `WEBHOOK_SECRET` | *(empty)* | Signs the webhooks: `X-Converter-Signature: sha256=<HMAC-SHA256 of the body>`. |
 | `WEBHOOK_HOSTS` | *(empty)* | Hosts allowed in `callback_url`, comma-separated (`n8n.lan, paperless`). Empty = any host. |
 | `METRICS` | `true` | `false` turns off `GET /metrics`. |
+| `PREVIEWS` | `true` | `false` turns off result previews (`GET /api/jobs/{id}/preview`). |
+| `URL_IMPORT` | `true` | `false` turns off converting a file from a web address (`POST /api/fetch`). |
+| `URL_ALLOW_PRIVATE` | `false` | `true` also allows local network addresses in `POST /api/fetch`: turn it on only if people you do not trust cannot reach the service. |
 | `CONVERTER_ADMIN_LOGIN` | `true` | Initial value of the *Password to enter this page* switch. |
 | `DATA_DIR` | `/work/data` | Folder holding the API keys and admin settings. |
 | `CONVERTER_CPUS` | `4` | Maximum CPUs for the container. |
@@ -182,6 +185,34 @@ Notes:
 - If a conversion fails, the message explains why, and the **Riprova** ("Retry") button puts it back in the queue.
 - Results can be downloaded for `RETAIN_HOURS` hours, then they are deleted.
 - The page follows the operating system's light or dark theme.
+
+## Options and presets
+
+Below the file list the **Options** box shows the options that apply to the chosen formats:
+
+| Result | Options |
+|---|---|
+| Images (ImageMagick) | Quality (JPG, WEBP, HEIC, AVIF, JP2), longest side in pixels (shrink only), remove metadata (date, GPS, camera) |
+| Video | Start and end (`90`, `1:30`, `0:01:30.5`), maximum resolution, quality (MP4, MOV, MKV, WEBM…), audio bitrate, metadata |
+| Audio | Start and end, bitrate (lossy formats), mono audio, metadata |
+| PDF to JPG or PNG | Resolution (72, 150, 300 DPI) and pages (`2` or `3-5`, `4-` to the end) |
+
+With options, the **same format** as output makes sense too: at the end of the menu there is for example *JPG (same format)* to shrink a photo, or *MP4 (same format)* to trim a video or make it lighter.
+
+**Presets** fill in format and options in one click. There are built-in ones (*Photos for the web*, *Photos for email*, *Video for WhatsApp*, *Light video*, *Audio for podcasts*, *First 30 seconds as MP3*, *PDF pages for printing*) and your own: **Save as preset** remembers the current format and options in the browser.
+
+## Preview, history, addresses and paste
+
+- **Preview**: on finished results the button shows the image, the first page of PDFs and documents, a player for audio and video (formats the browser cannot play become a 30-second clip), the text, or the file list of an archive. `PREVIEWS=false` turns it off.
+- **Recent conversions**: on the start page, the latest conversions made in this browser, as long as the files are kept on the server (`RETAIN_HOURS`). The history lives only in the browser (localStorage).
+- **From an address**: paste an `https://…` address in the field below the button; the server downloads the file, then it is converted like the others (a web page too, which becomes for example Markdown, or a PDF without images). Local network addresses are refused unless `URL_ALLOW_PRIVATE=true`; `URL_IMPORT=false` turns the feature off.
+- **Paste** (⌘V / Ctrl+V) a copied file, an image (a screenshot, for example), some text (it becomes a `.txt` file) or an address.
+
+## Installable app
+
+The page can be installed as an app (PWA): Chrome and Edge show **Install** in the header, on iPhone use *Share → Add to Home Screen*. On Android, and in Chrome on the desktop, the installed app also appears in the system **Share** menu: shared files open in the converter.
+
+Installing and sharing need **HTTPS** (or `localhost`): browsers do not enable the service worker on `http://`. A reverse proxy with a certificate is enough, or `tailscale serve`. On iPhone, Safari cannot receive files from the Share menu: use Shortcuts with the API there.
 
 ## PDF tools
 
@@ -236,11 +267,14 @@ curl -H "apikey: uconv_..." -F file=@report.docx -F target=pdf http://localhost:
 | `GET` | `/metrics` | Prometheus metrics |
 | `GET` | `/api/formats` | Supported formats and combinations |
 | `GET` | `/api/plan/{src}/{dst}` | Planned steps for a conversion |
+| `GET` | `/api/options/{src}/{dst}` | Options available for a conversion |
+| `POST` | `/api/fetch` | Download a file from a web address, to convert it |
 | `POST` | `/api/jobs` | Create a job by uploading a file |
 | `GET` | `/api/pdf` | Available PDF tools and their options |
 | `POST` | `/api/pdf/{tool}` | Start a PDF tool on one or more PDFs |
 | `GET` | `/api/jobs/{id}` | Job status |
 | `GET` | `/api/jobs/{id}/download` | Download the result |
+| `GET` | `/api/jobs/{id}/preview` | Preview of the result |
 | `POST` | `/api/jobs/zip` | Download several results as one ZIP |
 | `DELETE` | `/api/jobs/{id}` | Delete a job and its files immediately |
 | `GET` | `/docs` | This documentation (`?lang=en` or `?lang=it`) |
@@ -265,11 +299,53 @@ Also used by the Docker healthcheck. It never requires a key. `programs` tells w
   "tools": ["Calibre", "FFmpeg", "ImageMagick", "LibreOffice", "..."],
   "retain_hours": 6.0,
   "max_upload_bytes": 21474836480,
-  "plico_url": ""
+  "plico_url": "",
+  "previews": true,
+  "url_import": true,
+  "same": ["jpg", "png", "mp3", "mp4", "..."]
 }
 ```
 
 `inputs` also contains the synonyms (`jpeg`, `yml`…), with the same targets as the main format. Category names are returned in Italian (`Documento` = Document, `Foglio di calcolo` = Spreadsheet, and so on): they are identifiers, translated by the web page.
+
+## `GET /api/options/{src}/{dst}`
+
+Options available for a conversion, with type (`int`, `select`, `bool`, `time`, `text`), label and allowed values. Permission: `formats`.
+
+```bash
+curl http://localhost:8080/api/options/png/jpg
+```
+
+```json
+{"options": [{"name": "quality", "type": "int", "label": "Qualità (1-100)", "min": 1, "max": 100},
+             {"name": "max_size", "type": "int", "label": "Lato lungo massimo (pixel)", "min": 16, "max": 20000},
+             {"name": "strip", "type": "bool", "label": "Togli i metadati (data, posizione GPS, fotocamera)"}]}
+```
+
+| Option | Applies to | Values |
+|---|---|---|
+| `quality` | JPG, WEBP, HEIC, AVIF, JP2 images | 1–100 (default 90) |
+| `max_size` | images | longest side in pixels, 16–20000 (shrink only) |
+| `strip` | images, audio, video | `true`: removes metadata |
+| `start`, `end` | audio, video, GIF | seconds or `m:ss` / `h:mm:ss`; `end` after `start` |
+| `height` | video, GIF | `2160`, `1440`, `1080`, `720`, `480`, `360` (shrink only) |
+| `video_quality` | MP4, MOV, M4V, MKV, TS, FLV, WEBM | `high`, `medium`, `low` |
+| `audio_bitrate` | video and lossy audio | `320`, `256`, `192`, `128`, `96`, `64` (kbps) |
+| `mono` | audio | `true`: one channel |
+| `dpi` | PDF → JPG/PNG | `72`, `150`, `300` |
+| `pages` | PDF → JPG/PNG | `2`, `3-5`, `4-` |
+
+Options depend on the program that does the last step; same-format conversions (`jpg` → `jpg`, `mp4` → `mp4`, listed in `same` in `/api/formats`) exist precisely to apply them. Labels are in Italian, like the category names: the web page translates them.
+
+## `POST /api/fetch`
+
+Field `url`: the server downloads the file (`http`/`https` only, at most 5 redirects, maximum size `MAX_UPLOAD_GB`) and keeps it for one hour. Returns `201`:
+
+```json
+{"staged": "9b1f…", "filename": "report.docx", "size": 48213, "ext": "docx", "targets": ["pdf", "odt", "…"]}
+```
+
+Then start the conversion with `POST /api/jobs`, sending `staged` instead of `file`. The name comes from `Content-Disposition` or from the address; if it has no known extension, from `Content-Type`. Private, local and reserved addresses are refused (`400`) unless `URL_ALLOW_PRIVATE=true`; the connection goes to the IP address that was checked, so a name that changes address between the check and the download cannot get around the block. The downloaded volume counts towards the key's daily limit. Permission: `convert`.
 
 ## `GET /api/plan/{src}/{dst}`
 
@@ -290,10 +366,12 @@ A `multipart/form-data` request with these fields:
 
 | Field | Required | Description |
 |---|---|---|
-| `file` | yes | The file to convert. The source format is taken from the file name's extension. |
+| `file` | yes (or `staged`) | The file to convert. The source format is taken from the file name's extension. |
 | `target` | yes | Target extension, for example `pdf`. |
 | `meta` | no | Free text (at most 2,000 characters) returned in the job status: useful for integrations. |
 | `callback_url` | no | Webhook: an `http`/`https` address called with `POST` when the job ends (see *Webhooks*). |
+| `options` | no | Conversion options as JSON, e.g. `{"quality": 80, "max_size": 1920}` (see `GET /api/options/{src}/{dst}`). Unknown options, or options that do not apply to the conversion: `400`. |
+| `staged` | instead of `file` | Id returned by `POST /api/fetch`: converts the file downloaded from an address. It can be used once. |
 
 Returns `201` with the job status (see below). Errors:
 
@@ -331,6 +409,8 @@ Errors always have the form `{"detail": "message"}`, meant to be shown to the us
 | `step` | Current step, with the step number when there is more than one |
 | `error` | When `error`: the reason, suitable for showing to the user |
 | `out_name`, `size` | When `done`: name of the resulting file and size in bytes |
+| `preview` | When `done`: kind of preview (`image`, `audio`, `video`, `text`), if the result has one |
+| `options` | The conversion options received, already checked |
 
 Returns `404` if the job does not exist: never created, already deleted, expired, or the server was restarted.
 
@@ -339,6 +419,10 @@ Returns `404` if the job does not exist: never created, already deleted, expired
 Returns the file with the right name (`Content-Disposition`), accented characters included. Returns `409` if the job has not finished yet.
 
 The result's name is the original file's name with the new extension: `Final report.docx` → `Final report.pdf`. If the result contains several files, for example the pages of a PDF converted to images, you get a ZIP.
+
+## `GET /api/jobs/{id}/preview`
+
+Preview of the result, of the kind given by the job's `preview` field: `image` (the image if browsers can show it, otherwise a PNG; for PDFs and documents the first page; for a ZIP of pages the first one), `audio` and `video` (the file itself, or a 30-second clip as MP3 or 480p MP4 for formats browsers cannot play), `text` (the first 64 KB, or the file list of an archive; HTML and SVG are never served as a page). Generated previews stay in the job folder. `404` if the format has no preview, `409` if the job has not finished. Permission: `jobs`.
 
 ## `POST /api/jobs/zip`
 

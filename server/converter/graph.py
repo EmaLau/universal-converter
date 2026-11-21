@@ -63,6 +63,7 @@ class Graph:
         self.edges: list[Edge] = []
         self.disabled: set[tuple[str, str]] = set()
         self.plans: dict[str, dict[str, list[Edge]]] = {}
+        self.same: dict[str, Edge] = {}  # stesso formato in uscita: ha senso con le opzioni (ridimensionare, tagliare)
 
     def add(self, srcs: str, dsts: str, fn: Converter, tool: str, **kw) -> None:
         """Aggiunge un arco per ogni coppia: add("png jpg", "pdf", ...)."""
@@ -70,6 +71,11 @@ class Graph:
             for d in dsts.split():
                 if s != d:
                     self.edges.append(Edge(s, d, fn, tool, **kw))
+
+    def add_same(self, exts: str, fn: Converter, tool: str) -> None:
+        """Conversione nello stesso formato (jpg -> jpg), per applicare le opzioni: mai dentro un percorso."""
+        for e in exts.split():
+            self.same[e] = Edge(e, e, fn, tool)
 
     def disable(self, pairs: Iterable[tuple[str, str]]) -> None:
         """Toglie singoli archi (es. un codec che manca nell'immagine) e ricalcola i percorsi."""
@@ -105,7 +111,14 @@ class Graph:
                       for src in {e.src for e in self.edges}}
 
     def plan(self, src: str, dst: str) -> list[Edge] | None:
-        return self.plans.get(normalize(src), {}).get(normalize(dst))
+        src, dst = normalize(src), normalize(dst)
+        if src == dst:
+            e = self.same.get(src)
+            return [e] if e and (src, dst) not in self.disabled else None
+        return self.plans.get(src, {}).get(dst)
+
+    def same_formats(self) -> list[str]:
+        return sorted((e for e in self.same if (e, e) not in self.disabled), key=lambda d: ORDER.get(d, 999))
 
     def targets(self, src: str) -> list[str]:
         return sorted(self.plans.get(normalize(src), {}), key=lambda d: ORDER.get(d, 999))
@@ -116,8 +129,10 @@ class Graph:
         for alias, real in ALIASES.items():
             if real in inputs:
                 inputs.setdefault(alias, inputs[real])
+        same = self.same_formats()
+        same += [a for a, real in ALIASES.items() if real in same]
         return {"inputs": dict(sorted(inputs.items())), "categories": CATEGORY_OF,
-                "tools": sorted({e.tool for e in self.edges})}
+                "tools": sorted({e.tool for e in self.edges}), "same": same}
 
 
 WRITER = "doc docx odt rtf txt pages wpd wps fodt abw sxw lwp hwp"
@@ -182,5 +197,9 @@ def default_graph(disabled: Iterable[tuple[str, str]] = ()) -> Graph:
     # da WOFF il formato giusto (TTF o OTF) dipende dai contorni del font: solo dal file originale, mai a catena
     g.add("woff woff2", "ttf otf woff woff2", tools.font, "fontTools", source_only=True)
     g.add(ARCHIVE, ARCHIVE_OUT, tools.archive, "libarchive")
+    # stesso formato, con le opzioni: foto piu' piccole, video piu' leggeri, audio tagliato
+    g.add_same("jpg png webp heic avif tiff gif", tools.imagemagick, "ImageMagick")
+    g.add_same(AUDIO_OUT, tools.ffmpeg, "FFmpeg")
+    g.add_same(VIDEO_OUT, tools.ffmpeg, "FFmpeg")
     g.disable(disabled)  # calcola anche i percorsi
     return g

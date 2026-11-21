@@ -15,6 +15,9 @@ TERMS = {
     "Pagine": "Pages", "Intervalli (vuoto = una pagina per file)": "Ranges (empty = one page per file)",
     "Pagine (vuoto = tutte)": "Pages (empty = all)", "Rotazione": "Rotation", "Compressione": "Compression",
     "Lingue": "Languages",
+    "Qualità (1-100)": "Quality (1-100)", "Lato lungo massimo (pixel)": "Longest side (pixels)",
+    "Inizio (es. 0:30)": "Start (e.g. 0:30)", "Fine (es. 1:45)": "End (e.g. 1:45)",
+    "Pagine (es. 2 oppure 3-5)": "Pages (e.g. 2 or 3-5)",
 }
 
 _EN: list[tuple[str, str]] = [
@@ -72,6 +75,33 @@ _EN: list[tuple[str, str]] = [
     (r"file (.+) non valido: (.*)", r"invalid \1 file: \2"),
     (r"errore interno: (.*)", r"internal error: \1"),
     (r"annullato", "cancelled"),
+    (r"il PDF ha (\d+) pagine: non c'è la pagina (\d+)", r"the PDF has \1 pages: there is no page \2"),
+    # opzioni di conversione (options.py)
+    (r"options troppo lungo", "options is too long"),
+    (r"options deve essere un oggetto JSON", "options must be a JSON object"),
+    (r"opzione sconosciuta: (.*)", r"unknown option: \1"),
+    (r"opzione non disponibile per questa conversione: (.*)", r"option not available for this conversion: \1"),
+    (r"la fine deve venire dopo l'inizio", "the end must come after the start"),
+    # anteprime e indirizzi (preview.py, fetch.py)
+    (r"Anteprima non disponibile per questo formato", "No preview for this format"),
+    (r"Anteprima non disponibile per questo file", "No preview for this file"),
+    (r"Anteprime disattivate \(PREVIEWS=false\)", "Previews disabled (PREVIEWS=false)"),
+    (r"Manca il file", "The file is missing"),
+    (r"File non trovato", "File not found"),
+    (r"File scaricato non trovato \(scaduto o server riavviato\)", "Downloaded file not found (expired or server restarted)"),
+    (r"Importazione da indirizzo disattivata \(URL_IMPORT=false\)", "Import from an address disabled (URL_IMPORT=false)"),
+    (r"Indirizzo mancante", "The address is missing"),
+    (r"Indirizzo troppo lungo", "The address is too long"),
+    (r"Serve un indirizzo http o https", "An http or https address is needed"),
+    (r"Indirizzi con nome utente e password non ammessi", "Addresses with a user name and password are not allowed"),
+    (r"Indirizzo non ammesso", "Address not allowed"),
+    (r"Indirizzo della rete locale non ammesso \(URL_ALLOW_PRIVATE\)", "Local network addresses are not allowed (URL_ALLOW_PRIVATE)"),
+    (r"Host sconosciuto: (.*)", r"Unknown host: \1"),
+    (r"Il sito ha risposto (\d+) senza indirizzo", r"The site answered \1 without an address"),
+    (r"Il sito ha risposto (\d+)", r"The site answered \1"),
+    (r"Certificato del sito non valido", "Invalid site certificate"),
+    (r"Download non riuscito: (.*)", r"Download failed: \1"),
+    (r"Troppi redirect", "Too many redirects"),
     # note sul risultato
     (r"il PDF era gia' compresso: hai ricevuto l'originale", "the PDF was already compressed: you got the original"),
     (r"dimensione ridotta del (\d+)%", r"size reduced by \1%"),

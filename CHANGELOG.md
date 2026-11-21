@@ -5,6 +5,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-11-21
+
+### Added
+- **Conversion options**: quality, longest side and metadata removal for images; start/end trimming, maximum
+  resolution, video quality, audio bitrate and mono for audio and video; DPI and pages for PDF to images.
+  `GET /api/options/{src}/{dst}` lists them, `POST /api/jobs` takes them in the `options` field (JSON).
+- **Same-format conversions** (`jpg` → `jpg`, `mp4` → `mp4`, `mp3` → `mp3`…) to apply the options: listed in `same`
+  in `/api/formats`, so the Nextcloud menus do not change.
+- **Presets** on the web page: built-in ones (photos for the web or email, video for WhatsApp, light video,
+  podcast audio, first 30 seconds as MP3, PDF pages for printing) and your own, saved in the browser.
+- **Preview** of the results before downloading: images, first page of PDFs and documents, audio and video players
+  (30-second clips for formats browsers cannot play), text and archive listings. `GET /api/jobs/{id}/preview`,
+  `preview` field in the job status, `PREVIEWS=false` to turn it off.
+- **Recent conversions** on the start page, kept only in the browser, as long as the results are on the server.
+- **Convert from a web address**: `POST /api/fetch` downloads the file (private and local addresses refused unless
+  `URL_ALLOW_PRIVATE=true`, connection pinned to the checked IP, redirects re-checked), then `POST /api/jobs` with
+  `staged`. `URL_IMPORT=false` turns it off.
+- **Paste** files, images, text or addresses into the page (⌘V / Ctrl+V).
+- **Installable app (PWA)** with the system **Share** menu (Web Share Target) on Android and desktop Chrome; needs HTTPS.
+- Self-test: conversions with options and previews of every result.
+
 ## [2.3.0] - 2026-11-21
 
 ### Added

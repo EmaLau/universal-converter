@@ -80,6 +80,28 @@ const UC_I18N = (() => {
     "Stato, download e cancellazione dei lavori": "Job status, download and deletion",
     "Lavori contemporanei": "Concurrent jobs", "MB al giorno": "MB per day", "senza limite": "no limit",
     "Apri in Plico": "Open in Plico",
+    // anteprima, cronologia, indirizzi, incolla, app installabile (2.4)
+    "⤓ Installa": "⤓ Install", "Conversioni recenti": "Recent conversions", "Svuota la cronologia": "Clear history",
+    "Solo in questo browser. I risultati restano sul server per qualche ora.": "Only in this browser. Results stay on the server for a few hours.",
+    "oppure un indirizzo web (https://…)": "or a web address (https://…)", "Indirizzo del file": "File address", "Aggiungi": "Add",
+    "Puoi anche incollare (⌘V / Ctrl+V) un file, un'immagine, un testo o un indirizzo.": "You can also paste (⌘V / Ctrl+V) a file, an image, some text or an address.",
+    "Download dall'indirizzo…": "Downloading from the address…", "Anteprima": "Preview", "Chiudi anteprima": "Close preview",
+    "Preparazione dell'anteprima…": "Preparing the preview…", "Anteprima non disponibile per questo file": "No preview for this file",
+    // opzioni di conversione e preset
+    "Preset": "Preset", "— nessuno —": "— none —", "Predefiniti": "Built-in", "I miei preset": "My presets",
+    "Nome del preset": "Preset name", "Salva": "Save", "Annulla": "Cancel", "Salva come preset": "Save as preset",
+    "Elimina il preset": "Delete preset", "Opzioni": "Options",
+    "Qualità (1-100)": "Quality (1-100)", "Lato lungo massimo (pixel)": "Longest side (pixels)",
+    "Inizio (es. 0:30)": "Start (e.g. 0:30)", "Fine (es. 1:45)": "End (e.g. 1:45)",
+    "Risoluzione massima": "Maximum resolution", "Originale": "Original", "Qualità del video": "Video quality",
+    "Predefinita": "Default", "Alta (file più grande)": "High (larger file)", "Media": "Medium", "Bassa (file più piccolo)": "Low (smaller file)",
+    "Bitrate dell'audio": "Audio bitrate", "Predefinito": "Default", "Audio mono (un solo canale)": "Mono audio (one channel)",
+    "Risoluzione delle pagine": "Page resolution", "150 DPI (predefinita)": "150 DPI (default)", "72 DPI (schermo)": "72 DPI (screen)",
+    "300 DPI (stampa)": "300 DPI (print)", "Pagine (es. 2 oppure 3-5)": "Pages (e.g. 2 or 3-5)", "tutte": "all",
+    "Togli i metadati (data, posizione GPS, fotocamera)": "Remove metadata (date, GPS location, camera)",
+    "Foto per il web": "Photos for the web", "Foto per email": "Photos for email", "Video per WhatsApp": "Video for WhatsApp",
+    "Video leggero (480p)": "Light video (480p)", "Audio per podcast": "Audio for podcasts",
+    "Primi 30 secondi in MP3": "First 30 seconds as MP3", "Pagine PDF per la stampa": "PDF pages for printing",
     "Attivo: ogni chiamata fatta fuori dalla pagina web deve avere una chiave. La pagina web continua a funzionare.":
       "On: every call made outside the web page needs a key. The web page keeps working.",
     "Disattivo: le chiamate senza chiave sono accettate. Le chiavi limitano comunque cosa può fare ogni script.":
@@ -98,6 +120,7 @@ const UC_I18N = (() => {
     [/^(.+) → ([A-Z0-9.]+)$/, m => tr(m[1]) + " → " + m[2]],
     [/^(.+)\. Usa le frecce per cambiare l'ordine\.$/, m => tr(m[1]) + ". Use the arrows to change the order."],
     [/^Formato \.(.+) non supportato$/, "Format .$1 is not supported"],
+    [/^([A-Z0-9.]+) \(stesso formato\)$/, "$1 (same format)"],
     [/^Errore: (.*)$/s, "Error: $1"], [/^Errore (\d+)$/, "Error $1"],
     [/^Pronto: (.*)$/s, "Ready: $1"], [/^Caricamento (\d+)%$/, "Uploading $1%"],
     [/^In coda \(posizione (\d+)\)…$/, "Queued (position $1)…"],
@@ -107,6 +130,7 @@ const UC_I18N = (() => {
     [/^Creata (.+) · ultimo uso: mai$/, "Created $1 · last used: never"],
     [/^Creata (.+) · ultimo uso: (.+)$/, "Created $1 · last used: $2"],
     [/^(.+) · Convertitore$/, m => tr(m[1]) + " · Converter"],
+    [/^Solo in questo browser\. I risultati restano sul server per ([\d.]+) ore\.$/, "Only in this browser. Results stay on the server for $1 hours."],
   ];
 
   let saved = null;
@@ -128,7 +152,7 @@ const UC_I18N = (() => {
     return s.slice(0, s.indexOf(t[0])) + out + s.slice(s.lastIndexOf(t[t.length - 1]) + 1);
   }
 
-  const ATTRS = ["placeholder", "title", "aria-label"];
+  const ATTRS = ["placeholder", "title", "aria-label", "label"];
   function translate(node) {
     if (node.nodeType === 3) {
       const v = tr(node.data);

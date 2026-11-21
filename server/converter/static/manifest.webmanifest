@@ -1,0 +1,28 @@
+{
+  "name": "Universal Converter",
+  "short_name": "Converter",
+  "description": "Self-hosted file converter: documents, images, audio, video, ebooks, archives and PDF tools.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f7fb",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {"src": "static/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "static/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "static/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+    {"src": "static/icon.svg", "sizes": "any", "type": "image/svg+xml"}
+  ],
+  "share_target": {
+    "action": "share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [{"name": "files", "accept": ["*/*", "image/*", "video/*", "audio/*", "application/pdf", "text/*"]}]
+    }
+  }
+}

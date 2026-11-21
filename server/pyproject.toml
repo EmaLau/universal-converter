@@ -1,6 +1,6 @@
 [project]
 name = "universal-converter"
-version = "2.3.0"
+version = "2.4.0"
 description = "Convertitore di file self-hosted: documenti, immagini, audio, video, ebook, archivi e strumenti PDF"
 requires-python = ">=3.11"
 license = "AGPL-3.0-only"
@@ -21,4 +21,4 @@ build-backend = "setuptools.build_meta"
 packages = ["converter"]
 
 [tool.setuptools.package-data]
-converter = ["static/*.html", "static/*.js", "entrypoint.sh"]
+converter = ["static/*.html", "static/*.js", "static/*.png", "static/*.svg", "static/*.webmanifest", "entrypoint.sh"]

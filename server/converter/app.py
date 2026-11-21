@@ -4,15 +4,19 @@ API (intestazione facoltativa "apikey"; obbligatoria fuori dalla pagina web se l
   GET    /healthz                     stato del servizio
   GET    /api/formats                 {"inputs": {ext: [target...]}, "categories": {...}, "tools": [...]}
   GET    /api/plan/{src}/{dst}        passaggi previsti per una conversione
-  POST   /api/jobs                    multipart: file, target, [meta]  -> 201 + stato del lavoro
+  GET    /api/options/{src}/{dst}     opzioni di conversione disponibili (qualita', dimensione, taglio...)
+  POST   /api/fetch                   url -> scarica un file da un indirizzo e lo tiene da parte (staged)
+  POST   /api/jobs                    multipart: file (o staged), target, [options], [meta]  -> 201 + stato
   GET    /api/pdf                     strumenti PDF disponibili e loro opzioni
   POST   /api/pdf/{tool}              multipart: files (uno o piu'), opzioni, [meta] -> 201 + stato del lavoro
   GET    /api/jobs/{id}               stato: queued | running | done | error
   GET    /api/jobs/{id}/download      risultato
+  GET    /api/jobs/{id}/preview       anteprima del risultato (immagine, audio, video o testo)
   DELETE /api/jobs/{id}               cancella subito i file del lavoro
   GET    /docs                        documentazione (?lang=it|en)
   GET    /apidocs                     documentazione interattiva dell'API
   GET    /admin                       chiavi API (apikeys.py)
+  GET    /manifest.webmanifest, /sw.js  app installabile (PWA) e condivisione dal menu Condividi
 
 Avvio: uvicorn --factory converter.app:create_app
 """
@@ -31,16 +35,21 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import Body, FastAPI, File, Form, Request, Security, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from starlette.background import BackgroundTask
 
-from . import __version__, apikeys, i18n, pdftools, webhooks
+from . import __version__, apikeys, i18n, options, pdftools, webhooks
 from .config import Settings
+from .formats import ext_of, normalize
 from .graph import Graph, default_graph
 from .jobs import JobError, JobManager
 from .runner import set_file_size_limit
 
 STATIC = Path(__file__).parent / "static"
+STATIC_FILES = {"i18n.js": "text/javascript", "icon.svg": "image/svg+xml", "icon-192.png": "image/png",
+                "icon-512.png": "image/png", "icon-maskable-512.png": "image/png", "apple-touch-icon.png": "image/png"}
+# le anteprime sono servite dallo stesso sito della pagina: niente script, niente moduli, niente frame
+CSP_PREVIEW = "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox"
 XRW = "converter"  # valore di X-Requested-With mandato dalla pagina admin
 
 API_DOC = """Convertitore di file self-hosted: si carica un file, si controlla lo stato del lavoro, si scarica il risultato.
@@ -137,7 +146,9 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
 
     def security_headers(request: Request, resp):
         h = resp.headers
-        h["Content-Security-Policy"] = CSP_DOCS if request.url.path == "/apidocs" else csp_page
+        path = request.url.path
+        h["Content-Security-Policy"] = (CSP_DOCS if path == "/apidocs" else
+                                        CSP_PREVIEW if path.endswith("/preview") else csp_page)
         h["X-Content-Type-Options"] = "nosniff"
         h["X-Frame-Options"] = "DENY"
         h["Referrer-Policy"] = "no-referrer"
@@ -211,9 +222,25 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
             raise JobError(404, "Documentazione non generata: vedi docs/documentazione.md")
         return FileResponse(doc, media_type="text/html", headers={"Cache-Control": "no-cache", "Content-Language": lang})
 
-    @app.get("/static/i18n.js", include_in_schema=False)
-    async def i18n_js():
-        return FileResponse(STATIC / "i18n.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+    @app.get("/static/{name}", include_in_schema=False)
+    async def static(name: str):
+        if name not in STATIC_FILES or not (STATIC / name).exists():
+            raise JobError(404, "File non trovato")
+        return FileResponse(STATIC / name, media_type=STATIC_FILES[name], headers={"Cache-Control": "no-cache"})
+
+    @app.get("/manifest.webmanifest", include_in_schema=False)
+    async def manifest():
+        return FileResponse(STATIC / "manifest.webmanifest", media_type="application/manifest+json",
+                            headers={"Cache-Control": "no-cache"})
+
+    @app.post("/share", include_in_schema=False)
+    async def share_fallback():
+        """Condivisione dal menu Condividi senza service worker (pagina non in HTTPS): si apre solo la pagina."""
+        return RedirectResponse("./#tool=any", status_code=303)
+
+    @app.get("/sw.js", include_in_schema=False)
+    async def service_worker():
+        return FileResponse(STATIC / "sw.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
 
     @app.get("/metrics", tags=["Servizio"], response_class=PlainTextResponse)
     async def metrics():
@@ -257,7 +284,8 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
         """Formati e combinazioni supportate. Permesso: `formats`."""
         return graph.payload() | {"retain_hours": settings.retain_hours,
                                   "max_upload_bytes": settings.max_upload_bytes,
-                                  "plico_url": settings.plico_url}
+                                  "plico_url": settings.plico_url, "previews": settings.previews,
+                                  "url_import": settings.url_import}
 
     @app.get("/api/plan/{src}/{dst}", **api)
     async def plan(src: str, dst: str):
@@ -267,12 +295,38 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
             raise JobError(404, "Conversione non supportata")
         return [{"tool": e.tool, "from": e.src, "to": e.dst} for e in steps]
 
+    @app.get("/api/options/{src}/{dst}", **api)
+    async def conversion_options(src: str, dst: str):
+        """Opzioni disponibili per una conversione (qualità, lato lungo massimo, metadati, taglio di audio e video,
+        risoluzione, bitrate, pagine e DPI dei PDF in immagini), con tipo, etichetta e valori ammessi.
+        Si mandano a `POST /api/jobs` nel campo `options` come JSON. Permesso: `formats`."""
+        plan = graph.plan(src, dst)
+        if not plan:
+            raise JobError(404, "Conversione non supportata")
+        return {"options": options.definitions(options.applicable(plan, normalize(dst)))}
+
+    @app.post("/api/fetch", status_code=201, **api)
+    async def fetch_url(request: Request, url: str = Form(...)):
+        """Scarica un file da un indirizzo http(s) e lo tiene da parte per un'ora: la risposta dice nome,
+        dimensione e formati di arrivo; poi si avvia la conversione con `POST /api/jobs` e `staged=<id>`.
+        Gli indirizzi della rete locale sono rifiutati (salvo `URL_ALLOW_PRIVATE=true`). Permesso: `convert`."""
+        kid = getattr(request.state, "key_id", "")
+        st = await manager.stage_url(url, key_id=kid, limits=keys.limits(kid) if kid else None)
+        ext = ext_of(st.name)
+        return {"staged": st.id, "filename": st.name, "size": st.size, "ext": ext, "targets": graph.targets(ext)}
+
     @app.post("/api/jobs", status_code=201, **api)
-    async def create_job(request: Request, file: UploadFile = File(...), target: str = Form(...), meta: str = Form(""),
-                         callback_url: str = Form("")):
-        """Crea un lavoro caricando un file e indicando il formato di destinazione. Con `callback_url` il server
-        chiama quell'indirizzo (POST, JSON) quando il lavoro finisce. Permesso: `convert`."""
-        job = await manager.create(file, file.filename, target, meta, **job_args(request, callback_url))
+    async def create_job(request: Request, file: UploadFile | None = File(None), target: str = Form(...),
+                         meta: str = Form(""), callback_url: str = Form(""), options: str = Form(""),
+                         staged: str = Form("")):
+        """Crea un lavoro caricando un file (`file`) oppure con un file scaricato da `POST /api/fetch` (`staged`),
+        e indicando il formato di destinazione. `options` (JSON, facoltativo): opzioni di conversione, vedi
+        `GET /api/options/{src}/{dst}`. Con `callback_url` il server chiama quell'indirizzo (POST, JSON) quando
+        il lavoro finisce. Permesso: `convert`."""
+        if not file and not staged:
+            raise JobError(400, "Manca il file")
+        job = await manager.create(None if staged else file, file.filename if file else None, target, meta,
+                                   opts=options, staged=staged, **job_args(request, callback_url))
         return public(request, job)
 
     @app.get("/api/pdf", **api)
@@ -335,6 +389,16 @@ def create_app(settings: Settings | None = None, graph: Graph | None = None,
         if job.state != "done" or not job.out_path:
             raise JobError(409, "Non ancora pronto")
         return FileResponse(job.out_path, filename=job.out_name, media_type="application/octet-stream")
+
+    @app.get("/api/jobs/{job_id}/preview", **api)
+    async def job_preview(job_id: str):
+        """Anteprima del risultato: l'immagine (o la prima pagina, in PNG), un estratto di audio e video o i primi
+        64 KB di testo. Il campo `preview` dello stato dice il tipo (`image`, `audio`, `video`, `text`).
+        Permesso: `jobs`."""
+        if not settings.previews:
+            raise JobError(404, "Anteprime disattivate (PREVIEWS=false)")
+        path, mime = await manager.preview(manager.get(job_id))
+        return FileResponse(path, media_type=mime, headers={"Cache-Control": "private, max-age=3600"})
 
     @app.delete("/api/jobs/{job_id}", **api)
     async def job_delete(job_id: str):

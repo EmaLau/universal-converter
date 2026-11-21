@@ -48,9 +48,11 @@ def permission_for(method: str, path: str) -> str | None:
     """Permesso richiesto da una chiamata all'API, oppure None se la chiamata non ne richiede."""
     if path in ("/api/formats", "/api/pdf") or path.startswith("/api/plan/"):
         return "formats" if method == "GET" else None
-    if path == "/api/jobs" or re.fullmatch(r"/api/pdf/[^/]+", path):
+    if path.startswith("/api/options/"):
+        return "formats" if method == "GET" else None
+    if path in ("/api/jobs", "/api/fetch") or re.fullmatch(r"/api/pdf/[^/]+", path):
         return "convert" if method == "POST" else None
-    if re.fullmatch(r"/api/jobs/[^/]+(/download)?", path):
+    if re.fullmatch(r"/api/jobs/[^/]+(/download|/preview)?", path):
         return "jobs"
     return None
 

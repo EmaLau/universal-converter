@@ -29,6 +29,9 @@ services:
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
       WEBHOOK_HOSTS: ${WEBHOOK_HOSTS:-}
       METRICS: ${METRICS:-true}
+      PREVIEWS: ${PREVIEWS:-true}
+      URL_IMPORT: ${URL_IMPORT:-true}
+      URL_ALLOW_PRIVATE: ${URL_ALLOW_PRIVATE:-false}
     volumes:
       - converter-work:/work
     deploy:

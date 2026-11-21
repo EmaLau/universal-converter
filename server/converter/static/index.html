@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Convertitore</title>
 <script src="static/i18n.js"></script>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="static/apple-touch-icon.png">
+<meta name="theme-color" content="#4f46e5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Converter">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%234f46e5'/%3E%3Cpath d='M7 9h8l-2.5-2.5M17 15H9l2.5 2.5' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
 :root{
@@ -108,6 +113,28 @@ select{background:var(--surface-2);border:1px solid var(--line);border-radius:10
 .lang{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:2px;gap:2px}
 .lang button{border:0;background:transparent;color:var(--muted);font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;cursor:pointer}
 .lang button.on{background:var(--surface-2);color:var(--text)}
+/* conversioni recenti, anteprime, indirizzi, preset */
+.recent{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px 6px;margin:0 auto 26px;max-width:760px;box-shadow:var(--shadow)}
+.recent .rh{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.recent h2{font-size:16px;margin:0}
+.recent .rh .sp{flex:1}
+.recent .sub{color:var(--muted);font-size:12.5px;margin:2px 0 8px}
+.rrow{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.rrow .badge{width:36px;height:36px;font-size:10px}
+.linkbtn{background:none;border:0;color:var(--muted);cursor:pointer;font-size:13px;padding:4px}
+.linkbtn:hover{color:var(--text);text-decoration:underline}
+.pv{grid-column:1/-1;background:var(--surface-2);border-radius:10px;padding:10px;text-align:center}
+.pv img,.pv video{max-width:100%;max-height:440px;border-radius:6px;background:repeating-conic-gradient(color-mix(in srgb,var(--text) 6%,transparent) 0 25%,transparent 0 50%) 0 0/16px 16px}
+.pv audio{width:100%}
+.pv pre{text-align:left;max-height:340px;overflow:auto;margin:0;font-size:12.5px;white-space:pre-wrap;word-break:break-word}
+.pv .msg{color:var(--muted);font-size:13px;padding:8px}
+.urlrow{display:flex;gap:8px;max-width:520px;margin:18px auto 0}
+.urlrow input{flex:1;min-width:0;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.drop .hint{font-size:12.5px;margin-top:10px}
+.presets{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;flex-basis:100%}
+.presets label{flex:0 1 260px!important}
+.presets input[type=text]{min-width:180px}
+.opts h3{flex-basis:100%;margin:0;font-size:14px;color:var(--text)}
 @media (max-width:640px){
   .file{grid-template-columns:auto 1fr}
   .file .actions{grid-column:1/-1;justify-content:flex-end}
@@ -125,6 +152,7 @@ select{background:var(--surface-2);border:1px solid var(--line);border-radius:10
   <div class="sp"></div>
   <a class="pill" href="docs" style="text-decoration:none;color:inherit">Documentazione</a>
   <a class="pill" href="apidocs" style="text-decoration:none;color:inherit">API</a>
+  <button class="pill hidden" id="install" style="background:none;cursor:pointer">⤓ Installa</button>
   <span class="lang" data-lang-switch></span>
   <span class="pill" id="privacy" title="I file vengono elaborati su questo server e cancellati dopo qualche ora">🔒 Tutto in locale</span>
 </div></header>
@@ -133,6 +161,11 @@ select{background:var(--surface-2);border:1px solid var(--line);border-radius:10
   <section id="tools">
     <h1>Converti qualsiasi file</h1>
     <p class="lead">Documenti, fogli di calcolo, presentazioni, immagini, audio, video, sottotitoli, ebook, dati, font e archivi, più gli strumenti per i PDF. Niente cloud: tutto avviene sul tuo server.</p>
+    <div class="recent hidden" id="recent">
+      <div class="rh"><h2>Conversioni recenti</h2><div class="sp"></div><button class="linkbtn" id="rclear">Svuota la cronologia</button></div>
+      <p class="sub" id="rsub">Solo in questo browser. I risultati restano sul server per qualche ora.</p>
+      <div id="rlist"></div>
+    </div>
     <div class="filters" id="filters"></div>
     <div class="grid" id="grid"></div>
     <details class="formats" id="formats"><summary>Tutti i formati supportati</summary><table id="ftable" translate="no"></table></details>
@@ -146,8 +179,11 @@ select{background:var(--surface-2);border:1px solid var(--line);border-radius:10
     <div class="drop" id="drop">
       <button class="btn" id="pick">Seleziona i file</button>
       <p>oppure trascinali qui</p>
+      <form class="urlrow" id="urlform"><input type="url" id="url" placeholder="oppure un indirizzo web (https://…)" aria-label="Indirizzo del file" autocomplete="off"><button class="btn small ghost" type="submit">Aggiungi</button></form>
+      <p class="hint" id="pastehint">Puoi anche incollare (⌘V / Ctrl+V) un file, un'immagine, un testo o un indirizzo.</p>
       <input type="file" id="input" multiple hidden>
     </div>
+    <div class="opts hidden" id="copts" style="margin:18px 0 0"></div>
     <div class="files" id="files"></div>
   </section>
 </main>
@@ -206,6 +242,10 @@ function extOf(name){ const l=name.toLowerCase(); for(const c of ["tar.gz","tar.
   const e=l.includes(".")?l.split(".").pop():""; return ALIAS[e]||e; }
 function fmtSize(b){ if(b<1024) return b+" B"; const u=["KB","MB","GB"]; let i=-1; do{b/=1024;i++}while(b>=1024&&i<2); return b.toFixed(b<10?1:0)+" "+u[i]; }
 function el(tag, attrs={}, ...kids){ const n=document.createElement(tag); for(const [k,v] of Object.entries(attrs)){ if(k==="class") n.className=v; else if(k.startsWith("on")) n.addEventListener(k.slice(2),v); else if(v!==false&&v!=null) n.setAttribute(k,v===true?"":v);} for(const k of kids.flat()) n.append(k instanceof Node?k:document.createTextNode(k)); return n; }
+// formati di arrivo di un file; in fondo lo stesso formato, utile con le opzioni (foto piu' piccola, video tagliato)
+function targetsOf(ext){ const t=F.inputs[ext]||[]; return (F.same||[]).includes(ext) ? [...t, ext] : t; }
+function defaultTarget(ext, targets){ const other=targets.filter(t=>t!==ext);
+  return tool && targets.includes(tool[3]) ? tool[3] : (other.includes("pdf")&&cat(ext)!=="Immagine" ? "pdf" : other[0]||targets[0]); }
 function toolSources(t){ return t[2].startsWith("@") ? Object.keys(F.inputs).filter(e=>cat(e)===t[2].slice(1)) : t[2].split(" "); }
 
 async function load(){
@@ -238,8 +278,9 @@ function plicoUrl(){ const u=(F.plico_url||"").trim(); if(!u) return "";
   if(/^:\d+/.test(u)) return `${location.protocol}//${location.hostname}${u}`;
   return /^https?:\/\//.test(u) ? u : ""; }
 function route(){ const m=location.hash.match(/^#tool=(\w+|any)$/), pm=location.hash.match(/^#pdf=(\w+)$/);
+  if(location.hash==="#shared"){ show(null); history.replaceState(null,"","#tool=any"); takeShared(); return; }
   if(pm && P.some(t=>t.name===pm[1])) showPdf(P.find(t=>t.name===pm[1]));
-  else if(m){ const i=m[1]==="any"?null:+m[1]; show(i); } else { $("#tools").classList.remove("hidden"); $("#work").classList.add("hidden"); $("#footer").classList.add("hidden"); } }
+  else if(m){ const i=m[1]==="any"?null:+m[1]; show(i); } else { $("#tools").classList.remove("hidden"); $("#work").classList.add("hidden"); $("#footer").classList.add("hidden"); renderHistory(); } }
 function openTool(i){ location.hash = "tool="+(i===null?"any":i); }
 function show(i){
   tool = (i===null||!TOOLS[i]) ? null : TOOLS[i]; ptool = null; $("#opts").classList.add("hidden");
@@ -247,6 +288,7 @@ function show(i){
   $("#wtitle").textContent = tool ? tool[0] : "Converti qualsiasi file";
   $("#wlead").textContent = tool ? `${tool[1]} → ${label(tool[3])}` : "Carica uno o più file, poi scegli il formato di arrivo per ciascuno.";
   $("#input").accept = tool ? toolSources(tool).map(e=>"."+e).join(",") : "";
+  $("#urlform").classList.toggle("hidden", F.url_import===false); $("#pastehint").classList.remove("hidden");
   items = items.filter(it=>it.state!=="ready"); renderFiles(); window.scrollTo(0,0);
 }
 function showPdf(t){
@@ -255,6 +297,7 @@ function showPdf(t){
   $("#wtitle").textContent = t.title;
   $("#wlead").textContent = t.description + (t.max_files>1 ? ". Usa le frecce per cambiare l'ordine." : "");
   $("#input").accept = ".pdf,application/pdf";
+  $("#urlform").classList.add("hidden"); $("#pastehint").classList.add("hidden"); $("#copts").classList.add("hidden");
   const box=$("#opts"); box.replaceChildren();
   for(const o of t.options){
     const id="opt-"+o.name;
@@ -263,7 +306,7 @@ function showPdf(t){
     else box.append(el("label",{},o.label+(o.required?" *":""),el("input",{type:"text",id,placeholder:o.placeholder||"",value:o.type==="lang"?o.default:"",autocomplete:"off"})));
   }
   box.classList.toggle("hidden", !t.options.length);
-  items = items.filter(it=>!["ready","used","unsupported"].includes(it.state)); renderFiles(); window.scrollTo(0,0);
+  items = items.filter(it=>!["ready","used","unsupported","fetching"].includes(it.state)); renderFiles(); window.scrollTo(0,0);
 }
 function pdfOptions(fd){
   for(const o of ptool.options){ const n=document.getElementById("opt-"+o.name); if(n) fd.append(o.name, o.type==="bool" ? (n.checked?"true":"") : n.value.trim()); }
@@ -280,10 +323,10 @@ document.addEventListener("dragover",e=>e.preventDefault()); document.addEventLi
 
 function addFiles(list){
   for(const f of list){
-    const ext=extOf(f.name), targets=ptool ? [] : (F.inputs[ext]||[]);
+    const ext=extOf(f.name), targets=ptool ? [] : targetsOf(ext);
     if(ptool){ items.push({id:nextId++, file:f, ext, targets, target:null, state: ext==="pdf" ? (F.max_upload_bytes&&f.size>F.max_upload_bytes ? "error" : "ready") : "unsupported", fatal:!!(F.max_upload_bytes&&f.size>F.max_upload_bytes), error:`file troppo grande (massimo ${fmtSize(F.max_upload_bytes)})`}); continue; }
     if(F.max_upload_bytes && f.size>F.max_upload_bytes){ items.push({id:nextId++, file:f, ext, targets:[], target:null, state:"error", error:`file troppo grande (massimo ${fmtSize(F.max_upload_bytes)})`, fatal:true}); continue; }
-    let target = tool && targets.includes(tool[3]) ? tool[3] : (targets.includes("pdf")&&cat(ext)!=="Immagine" ? "pdf" : targets[0]);
+    const target = defaultTarget(ext, targets);
     items.push({id:nextId++, file:f, ext, targets, target, state: targets.length?"ready":"unsupported"});
   }
   renderFiles();
@@ -292,20 +335,23 @@ function renderFiles(){
   const box=$("#files"); box.replaceChildren();
   const visible = items.filter(i=>i.state!=="used"), merge = ptool && ptool.max_files>1;
   for(const it of visible){
-    const opts = it.targets.map(t=>el("option",{value:t,selected:t===it.target},label(t)+(NAMES[t]&&NAMES[t]!==label(t)?` (${NAMES[t]})`:"")));
+    const opts = it.targets.map(t=>el("option",{value:t,selected:t===it.target},label(t)+(t===it.ext?" (stesso formato)":NAMES[t]&&NAMES[t]!==label(t)?` (${NAMES[t]})`:"")));
     const sel = el("select",{disabled:it.state!=="ready", "aria-label":"Formato di arrivo",onchange:e=>{it.target=e.target.value; syncAll();}}, opts);
     let meta, right;
     if(it.state==="unsupported") meta=el("span",{class:"err"},ptool?"Qui servono file PDF":`Formato .${it.ext||"?"} non supportato`);
     else if(it.state==="error") meta=el("span",{class:"err",title:it.error},"Errore: "+it.error.slice(0,160));
     else if(it.state==="done") meta=el("span",{class:"ok"},`Pronto: ${it.out_name} · ${fmtSize(it.size)}${it.note?" · "+it.note:""}`);
     else if(it.state==="uploading") meta=el("span",{},`Caricamento ${Math.round((it.up||0)*100)}%`);
+    else if(it.state==="fetching") meta=el("span",{},"Download dall'indirizzo…");
     else if(it.state==="queued") meta=el("span",{},`In coda${it.position>1?` (posizione ${it.position})`:""}…`);
     else if(it.state==="running") meta=el("span",{},it.step||"Conversione…");
     else meta=el("span",{},fmtSize(it.file.size));
-    if(it.state==="done"){ right=el("a",{class:"dl",href:`api/jobs/${it.job}/download`,download:it.out_name},"Scarica");
+    if(it.state==="done"){ const acts=[];
+      if(it.preview && F.previews!==false) acts.push(el("button",{class:"btn small ghost","aria-expanded":it.showPv?"true":"false",onclick:()=>{it.showPv=!it.showPv;renderFiles();}},it.showPv?"Chiudi anteprima":"Anteprima"));
       // risultato PDF e Plico collegato: Plico lo prende dal convertitore (con la sua chiave) senza riscaricarlo
-      if(plicoUrl() && /\.pdf$/i.test(it.out_name||"")) right=el("span",{class:"actions"},
-        el("a",{class:"btn small ghost",href:`${plicoUrl()}/#from-converter=${it.job}`,target:"_blank",rel:"noopener"},"Apri in Plico"), right); }
+      if(plicoUrl() && /\.pdf$/i.test(it.out_name||"")) acts.push(el("a",{class:"btn small ghost",href:`${plicoUrl()}/#from-converter=${it.job}`,target:"_blank",rel:"noopener"},"Apri in Plico"));
+      acts.push(el("a",{class:"dl",href:`api/jobs/${it.job}/download`,download:it.out_name},"Scarica"));
+      right=el("span",{class:"actions"},acts); }
     else if(it.state==="error" && it.sources) right=el("button",{class:"btn small ghost",onclick:()=>{it.sources.forEach(s=>s.state="ready");items=items.filter(x=>x!==it);renderFiles();}},"Riprova");
     else if(it.state==="error" && !it.fatal) right=el("button",{class:"btn small ghost",onclick:()=>{it.state="ready";renderFiles();}},"Riprova");
     else if(it.state==="error") right="";
@@ -314,13 +360,14 @@ function renderFiles(){
       right=el("span",{class:"actions"},el("button",{class:"mv",title:"Sposta su","aria-label":"Sposta su",disabled:k===0,onclick:()=>mv(-1)},"↑"),el("button",{class:"mv",title:"Sposta giù","aria-label":"Sposta giù",disabled:k===r.length-1,onclick:()=>mv(1)},"↓")); }
     else if(ptool) right="";
     else right=sel;
-    const busy=["uploading","queued","running"].includes(it.state);
+    const busy=["uploading","queued","running","fetching"].includes(it.state);
     const p = it.state==="uploading" ? (it.up||0) : it.state==="running" ? it.progress : null;
     const bar = busy ? el("div",{class:"prog"+(p==null?" ind":"")},el("i",{style:p!=null?`width:${Math.round(p*100)}%`:""})) : "";
     box.append(el("div",{class:"file"},
       el("div",{class:"badge",style:`background:${color(it.ext)}`},(it.ext||"?").slice(0,4)),
       el("div",{style:"min-width:0"},el("div",{class:"fname",title:it.file.name,translate:"no"},it.file.name),el("div",{class:"fmeta"},meta),bar),
-      el("div",{class:"actions"},right, busy?"":el("button",{class:"x",title:"Rimuovi","aria-label":"Rimuovi",onclick:()=>{items=items.filter(x=>x!==it);renderFiles();}},"×"))));
+      el("div",{class:"actions"},right, busy?"":el("button",{class:"x",title:"Rimuovi","aria-label":"Rimuovi",onclick:()=>{items=items.filter(x=>x!==it);renderFiles();}},"×")),
+      it.state==="done"&&it.showPv ? previewBox(it.job, it.preview, it) : ""));
   }
   syncAll();
 }
@@ -335,11 +382,12 @@ function syncAll(){
   const all=$("#all"), same=ready.length&&ready.every(i=>i.target===ready[0].target)?ready[0].target:"";
   all.replaceChildren(el("option",{value:"",selected:!same},same?"—":"(diversi)"), ...common.map(t=>el("option",{value:t,selected:t===same},label(t))));
   all.closest("label").classList.toggle("hidden", !!ptool || ready.length<2 || !common.length);
+  refreshOptions();
 }
 $("#all").onchange = e => { if(!e.target.value) return; items.forEach(i=>{ if(i.state==="ready") i.target=e.target.value; }); renderFiles(); };
-$("#go").onclick = () => {
+$("#go").onclick = async () => {
   const ready=items.filter(i=>i.state==="ready");
-  if(!ptool) return ready.forEach(start);
+  if(!ptool){ await Promise.all(ready.map(async i=>{ i._optNames=await optionsFor(i.ext,i.target); })); return ready.forEach(start); }
   if(ptool.max_files>1){
     const fd=pdfOptions(new FormData()); ready.forEach(i=>{ fd.append("files",i.file,i.file.name); i.state="used"; });
     const res={id:nextId++, file:{name:ready[0].file.name.replace(/\.pdf$/i,"")+(UC_I18N.lang==="en"?"-merged.pdf":"-unito.pdf"), size:ready.reduce((a,i)=>a+i.file.size,0)}, ext:"pdf", targets:[], sources:ready, state:"uploading"};
@@ -356,7 +404,9 @@ $("#dlall").onclick = () => {
 };
 
 function start(it){
-  const fd=new FormData(); fd.append("target",it.target); fd.append("file",it.file,it.file.name);
+  const fd=new FormData(); fd.append("target",it.target);
+  if(it.staged) fd.append("staged",it.staged); else fd.append("file",it.file,it.file.name);
+  const o=chosenOptions(it); if(Object.keys(o).length) fd.append("options",JSON.stringify(o));
   send(it, "api/jobs", fd);
 }
 function send(it, url, fd){
@@ -364,7 +414,7 @@ function send(it, url, fd){
   const x=new XMLHttpRequest(); x.open("POST",url);
   let last=0; x.upload.onprogress=e=>{ if(e.lengthComputable){ it.up=e.loaded/e.total; if(Date.now()-last>250){last=Date.now();renderFiles();} } };
   x.onload=()=>{ let r={}; try{r=JSON.parse(x.responseText)}catch(e){}
-    if(x.status===201){ it.job=r.id; it.state=r.state; poll(it); }
+    if(x.status===201){ it.job=r.id; it.state=r.state; if(it.staged){ it.staged=null; it.fatal=true; } poll(it); }
     else { it.state="error"; it.error=r.detail||`HTTP ${x.status}`; }
     renderFiles(); };
   x.onerror=()=>{ it.state="error"; it.error="connessione interrotta"; renderFiles(); };
@@ -375,11 +425,193 @@ async function poll(it){
     await new Promise(r=>setTimeout(r, it.state==="queued"?1500:1000));
     try{ const r=await (await fetch(`api/jobs/${it.job}`)).json();
       if(r.detail){ it.state="error"; it.error=r.detail; }
-      else Object.assign(it,{state:r.state,progress:r.progress,step:r.step,error:r.error,out_name:r.out_name,size:r.size,position:r.position,note:r.note});
+      else { Object.assign(it,{state:r.state,progress:r.progress,step:r.step,error:r.error,out_name:r.out_name,size:r.size,position:r.position,note:r.note,preview:r.preview});
+        if(r.state==="done") addHistory(it); }
     }catch(e){ /* rete instabile: riprova */ }
     renderFiles();
   }
 }
+// ------------------------------------------------------------------ anteprima dei risultati
+// il nodo resta lo stesso tra un aggiornamento e l'altro della lista: video e audio non ripartono
+function previewBox(job, kind, holder){
+  if(holder.pvNode && holder.pvJob===job) return holder.pvNode;
+  const url=`api/jobs/${job}/preview`, box=el("div",{class:"pv"}), msg=t=>el("div",{class:"msg"},t);
+  const fail=()=>box.replaceChildren(msg("Anteprima non disponibile per questo file"));
+  if(kind==="image"){ const wait=msg("Preparazione dell'anteprima…"), img=el("img",{alt:"",class:"hidden"});
+    img.onload=()=>{ wait.remove(); img.classList.remove("hidden"); }; img.onerror=fail; img.src=url; box.append(wait,img); }
+  else if(kind==="audio"){ const a=el("audio",{controls:true,preload:"metadata"}); a.onerror=fail; a.src=url; box.append(a); }
+  else if(kind==="video"){ const v=el("video",{controls:true,preload:"metadata",playsinline:true}); v.onerror=fail; v.src=url; box.append(v); }
+  else if(kind==="text"){ box.append(msg("Preparazione dell'anteprima…"));
+    fetch(url).then(r=>r.ok?r.text():Promise.reject()).then(t=>box.replaceChildren(el("pre",{translate:"no"},t))).catch(fail); }
+  else fail();
+  holder.pvNode=box; holder.pvJob=job; return box;
+}
+
+// ------------------------------------------------------------------ cronologia (solo in questo browser)
+const HKEY="uc-history", HMAX=50;
+function loadHistory(){ try{ const h=JSON.parse(localStorage.getItem(HKEY)||"[]"); return Array.isArray(h)?h:[]; }catch(e){ return []; } }
+function saveHistory(h){ try{ localStorage.setItem(HKEY, JSON.stringify(h.slice(0,HMAX))); }catch(e){} }
+function addHistory(it){
+  if(!it.job || !it.out_name) return;
+  const h=loadHistory().filter(x=>x.job!==it.job);
+  h.unshift({job:it.job, name:it.file.name, out:it.out_name, size:it.size||0, preview:it.preview||"", at:Date.now(), until:Date.now()+(F.retain_hours||6)*3600e3});
+  saveHistory(h);
+}
+const checked=new Set(), hview={};
+function renderHistory(){
+  const now=Date.now(), h=loadHistory().filter(x=>x.until>now), box=$("#rlist");
+  saveHistory(h); box.replaceChildren();
+  $("#recent").classList.toggle("hidden", !h.length);
+  if(F.retain_hours) $("#rsub").textContent=`Solo in questo browser. I risultati restano sul server per ${F.retain_hours} ore.`;
+  const fmtTime=ts=>{ const d=new Date(ts); return d.toDateString()===new Date().toDateString() ? d.toLocaleTimeString(UC_I18N.lang,{hour:"2-digit",minute:"2-digit"}) : d.toLocaleString(UC_I18N.lang,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); };
+  for(const x of h){
+    const v=(hview[x.job] ||= {}), ext=extOf(x.out);
+    const acts=[];
+    if(x.preview && F.previews!==false) acts.push(el("button",{class:"btn small ghost",onclick:()=>{v.open=!v.open;renderHistory();}},v.open?"Chiudi anteprima":"Anteprima"));
+    acts.push(el("a",{class:"dl",href:`api/jobs/${x.job}/download`,download:x.out},"Scarica"));
+    acts.push(el("button",{class:"x",title:"Rimuovi","aria-label":"Rimuovi",onclick:()=>{saveHistory(loadHistory().filter(y=>y.job!==x.job));renderHistory();}},"×"));
+    box.append(el("div",{class:"rrow"},
+      el("div",{class:"badge",style:`background:${color(ext)}`},(ext||"?").slice(0,4)),
+      el("div",{style:"min-width:0"},el("div",{class:"fname",title:x.out,translate:"no"},x.out),
+        el("div",{class:"fmeta"},el("span",{translate:"no"},x.name),el("span",{},"· "+fmtSize(x.size)+" · "+fmtTime(x.at)))),
+      el("div",{class:"actions"},acts),
+      v.open ? previewBox(x.job, x.preview, v) : ""));
+    // il server e' stato riavviato o il lavoro e' stato cancellato: tolto dalla cronologia
+    if(!checked.has(x.job)){ checked.add(x.job);
+      fetch(`api/jobs/${x.job}`).then(r=>{ if(r.status===404){ saveHistory(loadHistory().filter(y=>y.job!==x.job)); renderHistory(); } }).catch(()=>{}); }
+  }
+}
+$("#rclear").onclick=()=>{ saveHistory([]); renderHistory(); };
+
+// ------------------------------------------------------------------ opzioni di conversione e preset
+const ORDER_OPTS=["quality","max_size","start","end","height","video_quality","audio_bitrate","mono","dpi","pages","strip"];
+const optCache={}, optVals={};
+let optKey="", optDefs={};
+function optionsFor(src,dst){ const k=src+">"+dst;
+  return optCache[k] ||= fetch(`api/options/${encodeURIComponent(src)}/${encodeURIComponent(dst)}`).then(r=>r.ok?r.json():{options:[]}).then(j=>{
+    for(const d of j.options||[]) optDefs[d.name]=d; return (j.options||[]).map(d=>d.name); }).catch(()=>[]); }
+function chosenOptions(it){
+  const names=it._optNames||[], o={};
+  for(const n of names){ const v=optVals[n]; if(v!==undefined && v!=="" && v!==false) o[n]=v; }
+  return o;
+}
+const BUILTIN=[
+  {name:"Foto per il web", target:"webp", options:{quality:80,max_size:1920,strip:true}},
+  {name:"Foto per email", target:"jpg", options:{quality:75,max_size:1280,strip:true}},
+  {name:"Video per WhatsApp", target:"mp4", options:{height:"720",video_quality:"medium",audio_bitrate:"128"}},
+  {name:"Video leggero (480p)", target:"mp4", options:{height:"480",video_quality:"low",audio_bitrate:"96"}},
+  {name:"Audio per podcast", target:"mp3", options:{audio_bitrate:"96",mono:true}},
+  {name:"Primi 30 secondi in MP3", target:"mp3", options:{end:"0:30"}},
+  {name:"Pagine PDF per la stampa", target:"png", options:{dpi:"300"}},
+];
+const PKEY="uc-presets";
+function userPresets(){ try{ const p=JSON.parse(localStorage.getItem(PKEY)||"[]"); return Array.isArray(p)?p:[]; }catch(e){ return []; } }
+function saveUserPresets(p){ try{ localStorage.setItem(PKEY, JSON.stringify(p)); }catch(e){} }
+let presetSel="", savingPreset=false;
+function applyPreset(pr){
+  for(const k of Object.keys(optVals)) delete optVals[k];
+  Object.assign(optVals, pr.options||{});
+  if(pr.target) items.forEach(i=>{ if(i.state==="ready" && i.targets.includes(pr.target)) i.target=pr.target; });
+  optKey=""; renderFiles();
+}
+let optBusy=0;
+async function refreshOptions(){
+  const box=$("#copts");
+  const ready=ptool ? [] : items.filter(i=>i.state==="ready");
+  if(!ready.length){ box.classList.add("hidden"); optKey=""; return; }
+  const n=++optBusy;
+  await Promise.all(ready.map(async i=>{ i._optNames=await optionsFor(i.ext,i.target); }));
+  if(n!==optBusy) return;  // nel frattempo la lista e' cambiata
+  const names=ORDER_OPTS.filter(o=>ready.some(i=>(i._optNames||[]).includes(o)));
+  const key=names.join(",")+"|"+presetSel+"|"+savingPreset+"|"+userPresets().length;
+  if(key===optKey) return;  // niente da ridisegnare: non togliamo il cursore da un campo
+  optKey=key; box.replaceChildren();
+  const all=[...BUILTIN.map((p,i)=>({...p,id:"b"+i})), ...userPresets().map((p,i)=>({...p,id:"u"+i,user:true}))];
+  const usable=all.filter(p=>!p.target || ready.some(i=>i.targets.includes(p.target)));
+  const sel=el("select",{"aria-label":"Preset",onchange:e=>{ presetSel=e.target.value; const pr=all.find(p=>p.id===presetSel); if(pr) applyPreset(pr); else optKey=""; refreshOptions(); }},
+    el("option",{value:""},"— nessuno —"),
+    usable.filter(p=>!p.user).length ? el("optgroup",{label:"Predefiniti"},usable.filter(p=>!p.user).map(p=>el("option",{value:p.id,selected:p.id===presetSel},p.name))) : "",
+    usable.filter(p=>p.user).length ? el("optgroup",{label:"I miei preset"},usable.filter(p=>p.user).map(p=>el("option",{value:p.id,selected:p.id===presetSel,translate:"no"},p.name))) : "");
+  const row=el("div",{class:"presets"},el("label",{},"Preset",sel));
+  if(savingPreset){
+    const name=el("input",{type:"text",placeholder:"Nome del preset",maxlength:"60","aria-label":"Nome del preset"});
+    const save=()=>{ const nm=name.value.trim(); if(!nm) return name.focus();
+      const same=ready.every(i=>i.target===ready[0].target);
+      const opts={}; for(const k of names){ const v=optVals[k]; if(v!==undefined&&v!==""&&v!==false) opts[k]=v; }
+      const list=userPresets().filter(p=>p.name!==nm); list.push({name:nm, target:same?ready[0].target:"", options:opts}); saveUserPresets(list);
+      savingPreset=false; presetSel="u"+(list.length-1); optKey=""; refreshOptions(); };
+    name.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); save(); } if(e.key==="Escape"){ savingPreset=false; optKey=""; refreshOptions(); } });
+    row.append(name, el("button",{class:"btn small",type:"button",onclick:save},"Salva"),
+      el("button",{class:"btn small ghost",type:"button",onclick:()=>{savingPreset=false;optKey="";refreshOptions();}},"Annulla"));
+    setTimeout(()=>name.focus(),0);
+  } else {
+    row.append(el("button",{class:"btn small ghost",type:"button",onclick:()=>{savingPreset=true;optKey="";refreshOptions();}},"Salva come preset"));
+    if(presetSel.startsWith("u")) row.append(el("button",{class:"btn small ghost",type:"button",onclick:()=>{
+      const list=userPresets(); list.splice(+presetSel.slice(1),1); saveUserPresets(list); presetSel=""; optKey=""; refreshOptions(); }},"Elimina il preset"));
+  }
+  box.append(row);
+  if(names.length) box.append(el("h3",{},"Opzioni"));
+  for(const nm of names){
+    const d=optDefs[nm]; if(!d) continue;
+    const id="copt-"+nm, val=optVals[nm];
+    const upd=v=>{ if(v===""||v===false) delete optVals[nm]; else optVals[nm]=v; };
+    if(d.type==="select") box.append(el("label",{},d.label,el("select",{id,onchange:e=>upd(e.target.value)},d.choices.map(c=>el("option",{value:c[0],selected:String(val??"")===c[0]},c[1])))));
+    else if(d.type==="bool") box.append(el("label",{class:"check"},el("input",{type:"checkbox",id,checked:!!val,onchange:e=>upd(e.target.checked)}),d.label));
+    else box.append(el("label",{},d.label,el("input",{type:"text",id,value:val??"",placeholder:d.placeholder||"",autocomplete:"off",
+      inputmode:d.type==="int"?"numeric":d.type==="time"?"decimal":"text",oninput:e=>{ const v=e.target.value.trim(); upd(d.type==="int"&&/^\d+$/.test(v)?+v:v); }})));
+  }
+  box.classList.remove("hidden");
+}
+
+// ------------------------------------------------------------------ file da un indirizzo web
+function addUrl(u){
+  const it={id:nextId++, file:{name:u, size:0}, ext:"", targets:[], target:null, state:"fetching"};
+  items.push(it); renderFiles();
+  const fd=new FormData(); fd.append("url",u);
+  fetch("api/fetch",{method:"POST",body:fd}).then(async r=>{ const j=await r.json().catch(()=>({}));
+    if(r.status!==201){ Object.assign(it,{state:"error",error:j.detail||`HTTP ${r.status}`,fatal:true}); return; }
+    const targets=targetsOf(j.ext);
+    Object.assign(it,{staged:j.staged, file:{name:j.filename, size:j.size}, ext:j.ext, targets,
+      target: defaultTarget(j.ext, targets),
+      state: targets.length ? "ready" : "unsupported"});
+  }).catch(()=>Object.assign(it,{state:"error",error:"connessione interrotta",fatal:true})).finally(renderFiles);
+}
+$("#urlform").onsubmit=e=>{ e.preventDefault(); const u=$("#url").value.trim(); if(!/^https?:\/\/\S+$/i.test(u)) return $("#url").focus(); $("#url").value=""; addUrl(u); };
+
+// ------------------------------------------------------------------ incolla (file, immagini, testo, indirizzi)
+document.addEventListener("paste", e=>{
+  const tag=(e.target.tagName||"").toLowerCase();
+  if(tag==="input"||tag==="textarea"||e.target.isContentEditable) return;
+  const files=[...(e.clipboardData?.files||[])], text=(e.clipboardData?.getData("text/plain")||"");
+  if(!files.length && !text.trim()) return;
+  e.preventDefault();
+  if($("#work").classList.contains("hidden")){ location.hash="tool=any"; show(null); }
+  if(files.length) return addFiles(files.map((f,i)=>f.name&&f.name!=="image.png" ? f : new File([f], `${UC_I18N.lang==="en"?"pasted":"incollato"}-${Date.now()}${i?"-"+i:""}.${(f.type.split("/")[1]||"png").replace("jpeg","jpg")}`, {type:f.type})));
+  if(ptool) return;
+  const tx=text.trim();
+  if(/^https?:\/\/\S+$/i.test(tx) && F.url_import!==false) return addUrl(tx);
+  addFiles([new File([text], UC_I18N.lang==="en"?"pasted-text.txt":"testo-incollato.txt", {type:"text/plain"})]);
+});
+
+// ------------------------------------------------------------------ app installabile: condivisione e installazione
+async function takeShared(){
+  if(!("caches" in window)) return;
+  const c=await caches.open("uc-share"), files=[]; let info=null;
+  const reqs=(await c.keys()).sort((a,b)=>a.url.localeCompare(b.url,undefined,{numeric:true}));
+  for(const req of reqs){ const r=await c.match(req);
+    if(req.url.endsWith("/shared/info")) info=await r.json().catch(()=>null);
+    else { const b=await r.blob(); files.push(new File([b], decodeURIComponent(r.headers.get("X-Name")||"file"), {type:b.type})); }
+    await c.delete(req); }
+  if(files.length) addFiles(files);
+  if(info){ const u=[info.url,info.text].map(x=>(x||"").trim()).find(x=>/^https?:\/\/\S+$/i.test(x));
+    if(u && F.url_import!==false) addUrl(u);
+    else if(!files.length && info.text) addFiles([new File([info.text], UC_I18N.lang==="en"?"shared-text.txt":"testo-condiviso.txt", {type:"text/plain"})]); }
+}
+if("serviceWorker" in navigator && window.isSecureContext) navigator.serviceWorker.register("sw.js").catch(()=>{});
+let installEvt=null;
+window.addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); installEvt=e; $("#install").classList.remove("hidden"); });
+$("#install").onclick=async()=>{ if(!installEvt) return; installEvt.prompt(); await installEvt.userChoice.catch(()=>{}); installEvt=null; $("#install").classList.add("hidden"); };
+window.addEventListener("appinstalled", ()=>$("#install").classList.add("hidden"));
 load();
 </script>
 </body>
