@@ -5,6 +5,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.6.2] - 2026-11-22
+
+### Fixed
+- **Long recordings no longer crash the Whisper service.** Audio longer than 15 minutes is sent in parts of about
+  10 minutes, cut in the nearest silence, and the subtitles are stitched back with the right timestamps; the page
+  shows *Whisper: transcription (part 3/7)* and the progress bar. Before, a one-hour lecture was sent in one request
+  and speaches on CPU went over its 2 GB memory limit and was killed.
+- When the Whisper service stops in the middle of a request, the error now says so (*possibly out of memory*)
+  instead of *Whisper service unreachable*.
+
 ## [2.6.1] - 2026-11-21
 
 ### Changed
@@ -193,7 +203,12 @@ All notable changes to this project are documented here. The format follows
 First public release: about 200 formats and more than 3,000 combinations with chained conversions, web page,
 JSON API, Nextcloud app "Converti in" and automatic PDFs for Nextcloud.
 
-[Unreleased]: https://github.com/EmaLau/universal-converter/compare/v2.3.0...HEAD
+[Unreleased]: https://github.com/EmaLau/universal-converter/compare/v2.6.2...HEAD
+[2.6.2]: https://github.com/EmaLau/universal-converter/compare/v2.6.1...v2.6.2
+[2.6.1]: https://github.com/EmaLau/universal-converter/compare/v2.6.0...v2.6.1
+[2.6.0]: https://github.com/EmaLau/universal-converter/compare/v2.5.0...v2.6.0
+[2.5.0]: https://github.com/EmaLau/universal-converter/compare/v2.4.0...v2.5.0
+[2.4.0]: https://github.com/EmaLau/universal-converter/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/EmaLau/universal-converter/compare/v2.2.2...v2.3.0
 [2.2.2]: https://github.com/EmaLau/universal-converter/compare/v2.2.1...v2.2.2
 [2.2.1]: https://github.com/EmaLau/universal-converter/compare/v2.2.0...v2.2.1

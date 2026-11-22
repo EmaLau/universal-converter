@@ -19,7 +19,7 @@ from converter.app import create_app, safe_folder
 from converter.config import Settings
 from converter.graph import Graph, default_graph
 from converter.runner import ConvError
-from converter.transcribe import Transcriber
+from converter.transcribe import Transcriber, format_cues, parse_cues
 
 from test_api import upper, wait
 
@@ -274,6 +274,36 @@ def test_transcriber_end_to_end(tmp_path, whisper):
     out = asyncio.run(Transcriber(whisper)(job, wav, "srt", tmp_path))
     assert "Ciao a tutti" in out.read_text() and b'name="language"\r\n\r\nen' in Whisper.seen[-1][2]
 
+
+
+def test_cues_parse_and_format():
+    srt = "1\r\n00:00:01,500 --> 00:00:03,000\r\nCiao\r\na tutti\r\n\r\n2\r\n00:01:02,250 --> 01:00:00,000\r\nFine\r\n"
+    vtt = "WEBVTT\n\n00:01.500 --> 00:03.000\nCiao\na tutti\n\n01:02.250 --> 1:00:00.000 align:start\nFine\n\n00:09.000 --> 00:09.500\n\n"
+    expected = [(1.5, 3.0, "Ciao\na tutti"), (62.25, 3600.0, "Fine")]
+    assert parse_cues(srt) == expected and parse_cues(vtt) == expected
+    assert format_cues(expected, "srt").startswith("1\n00:00:01,500 --> 00:00:03,000\nCiao\na tutti\n\n2\n00:01:02,250")
+    assert format_cues(expected, "vtt").startswith("WEBVTT\n\n00:00:01.500 --> 00:00:03.000\n")
+    assert parse_cues(format_cues(expected, "vtt")) == expected
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="serve ffmpeg")
+def test_transcriber_long_audio_in_parts(tmp_path, whisper):
+    """L'audio lungo va a Whisper a pezzi, tagliato nei silenzi; i sottotitoli vengono ricuciti con gli orari giusti."""
+    wav = tmp_path / "in.wav"
+    subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", "sine=d=3.3", "-f", "lavfi", "-i",
+                    "aevalsrc=0:d=0.6", "-f", "lavfi", "-i", "sine=d=6.1", "-filter_complex", "concat=n=3:v=0:a=1",
+                    str(wav)], check=True)
+    Whisper.reply = (200, "text/plain", "1\n00:00:00,000 --> 00:00:01,000\nPezzo\n")
+    t = Transcriber(whisper)
+    t.chunk = 4  # 10 s di audio: tagli a 3,6 s (nel silenzio) e a 7,6 s
+    job = SimpleNamespace(options={}, target="srt", step="", note="", progress=None)
+    cues = parse_cues(asyncio.run(t(job, wav, "srt", tmp_path)).read_text())
+    assert len(Whisper.seen) == 3 and all(b'name="response_format"\r\n\r\nsrt' in s[2] for s in Whisper.seen)
+    assert [round(a, 1) for a, _, _ in cues] == [0.0, 3.6, 7.6] and job.step.endswith("(parte 3/3)")
+    vtt = asyncio.run(t(job, wav, "vtt", tmp_path / "parts")).read_text()
+    assert vtt.startswith("WEBVTT") and len(parse_cues(vtt)) == 3
+    Whisper.reply = (200, "text/plain", "Ciao a tutti")
+    assert asyncio.run(t(job, wav, "txt", tmp_path)).read_text() == "Ciao a tutti\n\nCiao a tutti\n\nCiao a tutti\n"
 
 # ------------------------------------------------------------------ conversioni in blocco
 
